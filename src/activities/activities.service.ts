@@ -675,6 +675,156 @@ export class ActivitiesService {
     };
   }
 
+  // ── LONGITUDINAL ACROSS ALL GRADES (Pre-KG → Grade 10) ───────
+  // Tracks a student's competency journey across all academic years
+  async getStudentLongitudinal(student_id: string) {
+    const student = await this.studentRepo.findOne({ where: { id: student_id } });
+    // Get ALL scores for this student across ALL academic years
+    const allScores = await this.scoreRepo.find({
+      where: { student_id },
+      order: { last_updated: 'ASC' },
+    });
+
+    // Group by academic_year → subject → avg
+    const byYear: Record<string, Record<string, number[]>> = {};
+    allScores.forEach(s => {
+      if (!byYear[s.academic_year]) byYear[s.academic_year] = {};
+      if (!byYear[s.academic_year][s.subject]) byYear[s.academic_year][s.subject] = [];
+      byYear[s.academic_year][s.subject].push(+s.best_score);
+    });
+
+    // Get all academic years and subjects
+    const academicYears = Object.keys(byYear).sort();
+    const subjects = [...new Set(allScores.map(s => s.subject))].sort();
+
+    // Build timeline: each year → subject avg + overall avg
+    const timeline = academicYears.map(year => {
+      const yearScores = allScores.filter(s => s.academic_year === year);
+      const point: any = { academic_year: year, grade: yearScores[0]?.grade || '' };
+      subjects.forEach(sub => {
+        const subScores = byYear[year]?.[sub] || [];
+        point[sub] = subScores.length ? AVG(subScores) : null;
+      });
+      const allYearVals = yearScores.map(s => +s.best_score);
+      point.overall = allYearVals.length ? AVG(allYearVals) : null;
+      return point;
+    });
+
+    // Grade-wise overall avg (one point per grade)
+    const byGrade: Record<string, number[]> = {};
+    allScores.forEach(s => {
+      if (!s.grade) return;
+      if (!byGrade[s.grade]) byGrade[s.grade] = [];
+      byGrade[s.grade].push(+s.best_score);
+    });
+    const gradeTimeline = Object.entries(byGrade)
+      .sort((a, b) => {
+        const na = parseInt(a[0].replace(/\D/g, '')) || 0;
+        const nb = parseInt(b[0].replace(/\D/g, '')) || 0;
+        return na - nb;
+      })
+      .map(([grade, scores]) => ({ grade, avg: AVG(scores), level: SCORE_TO_LEVEL(AVG(scores)) }));
+
+    return { student, timeline, gradeTimeline, subjects, academicYears };
+  }
+
+  // ── COMPETENCY COVERAGE PER STUDENT ──────────────────────────
+  async getStudentCoverage(student_id: string, academic_year: string) {
+    const student = await this.studentRepo.findOne({ where: { id: student_id } });
+    const scores = await this.scoreRepo.find({ where: { student_id, academic_year } });
+
+    // Get all competencies for this student's grade
+    const grade = student?.current_class;
+    const allCompetencies = grade
+      ? await this.competencyRepo.find({ where: { grade, is_active: true } })
+      : [];
+
+    const coveredIds = new Set(scores.map(s => s.competency_id));
+    const covered = allCompetencies.filter(c => coveredIds.has(c.id));
+    const uncovered = allCompetencies.filter(c => !coveredIds.has(c.id));
+
+    // By subject
+    const subjects = [...new Set(allCompetencies.map(c => c.subject))].sort();
+    const bySubject = subjects.map(sub => {
+      const total = allCompetencies.filter(c => c.subject === sub);
+      const cov = covered.filter(c => c.subject === sub);
+      const score = scores.filter(s => cov.some(c => c.id === s.competency_id));
+      return {
+        subject: sub,
+        total: total.length,
+        covered: cov.length,
+        uncovered: total.length - cov.length,
+        coverage_percent: total.length ? +((cov.length / total.length) * 100).toFixed(1) : 0,
+        avg_score: score.length ? AVG(score.map(s => +s.best_score)) : 0,
+      };
+    });
+
+    return {
+      student,
+      total: allCompetencies.length,
+      covered: covered.length,
+      uncovered: uncovered.length,
+      coverage_percent: allCompetencies.length ? +((covered.length / allCompetencies.length) * 100).toFixed(1) : 0,
+      covered_competencies: covered.map(c => {
+        const s = scores.find(sc => sc.competency_id === c.id);
+        return { ...c, best_score: s?.best_score, best_rating: s?.best_rating, attempt_count: s?.attempt_count };
+      }),
+      uncovered_competencies: uncovered,
+      bySubject,
+    };
+  }
+
+  // ── SECTION COVERAGE ─────────────────────────────────────────
+  async getSectionCoverage(grade: string, section: string, academic_year: string) {
+    const students = await this.studentRepo.find({ where: { current_class: grade, section, is_active: true } });
+    const allCompetencies = await this.competencyRepo.find({ where: { grade, is_active: true } });
+    const activities = await this.activityRepo.find({ where: { grade, section, academic_year, is_active: true } });
+
+    // Which competencies have been assessed at least once via an activity
+    const activityCoveredIds = new Set<string>();
+    activities.forEach(a => { (a.competency_mappings as string[] || []).forEach(id => activityCoveredIds.add(id)); });
+
+    const subjects = [...new Set(allCompetencies.map(c => c.subject))].sort();
+
+    const bySubject = subjects.map(sub => {
+      const total = allCompetencies.filter(c => c.subject === sub);
+      const covered = total.filter(c => activityCoveredIds.has(c.id));
+      return {
+        subject: sub,
+        total: total.length,
+        covered: covered.length,
+        uncovered: total.length - covered.length,
+        coverage_percent: total.length ? +((covered.length / total.length) * 100).toFixed(1) : 0,
+        covered_competencies: covered,
+        uncovered_competencies: total.filter(c => !activityCoveredIds.has(c.id)),
+      };
+    });
+
+    // Per-student coverage
+    const scores = await this.scoreRepo.find({ where: { grade, section, academic_year } });
+    const studentCoverage = students.map(st => {
+      const studentScores = scores.filter(s => s.student_id === st.id);
+      const coveredCount = new Set(studentScores.map(s => s.competency_id)).size;
+      return {
+        student_id: st.id,
+        student_name: st.name,
+        covered: coveredCount,
+        total: allCompetencies.length,
+        coverage_percent: allCompetencies.length ? +((coveredCount / allCompetencies.length) * 100).toFixed(1) : 0,
+        avg_score: studentScores.length ? AVG(studentScores.map(s => +s.best_score)) : 0,
+      };
+    }).sort((a, b) => b.coverage_percent - a.coverage_percent);
+
+    return {
+      grade, section,
+      total_competencies: allCompetencies.length,
+      activity_covered: activityCoveredIds.size,
+      activity_coverage_percent: allCompetencies.length ? +((activityCoveredIds.size / allCompetencies.length) * 100).toFixed(1) : 0,
+      bySubject,
+      studentCoverage,
+    };
+  }
+
   // ── CONSECUTIVE DECLINE ───────────────────────────────────────
 
   async getConsecutiveDeclineStudents(academic_year: string) {

@@ -71,4 +71,34 @@ export class StudentsController {
   deletePermanently(@Param('id') id: string) {
     return this.studentsService.deletePermanently(id);
   }
+
+  // GET sections for a grade
+  // Usage: GET /students/sections/:grade
+  @Get('sections/:grade')
+  getSectionsForGrade(@Param('grade') grade: string) {
+    return this.studentsService.getSectionsForGrade(grade);
+  }
+
+  // GET promotion preview
+  // Usage: GET /students/promotion/preview?grade=Grade 3&section=Edison
+  @Get('promotion/preview')
+  getPromotionPreview(
+    @Query('grade') grade: string,
+    @Query('section') section: string,
+  ) {
+    return this.studentsService.getPromotionPreview(grade, section);
+  }
+
+  // POST execute promotion
+  // Usage: POST /students/promotion/execute
+  // Body: { grade, section, new_section, student_ids? }
+  @Post('promotion/execute')
+  promoteStudents(@Body() body: {
+    grade: string;
+    section: string;
+    new_section: string;
+    student_ids?: string[];
+  }) {
+    return this.studentsService.promoteStudents(body);
+  }
 }

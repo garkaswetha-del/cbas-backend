@@ -14,6 +14,11 @@ export class Activity {
   @Column()
   subject: string;
 
+  // Multi-subject: cross-curricular areas this activity also maps to
+  // e.g. ["Arts", "Interdisciplinary"] when a Social drama also covers Arts
+  @Column({ type: 'simple-array', nullable: true })
+  extra_subjects: string[];
+
   @Column()
   stage: string;
 

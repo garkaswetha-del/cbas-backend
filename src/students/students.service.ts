@@ -110,6 +110,85 @@ export class StudentsService {
     return { message: 'Student permanently deleted' };
   }
 
+  // ── PROMOTION ────────────────────────────────────────────────
+  // Grade order for promotion
+  private readonly GRADE_ORDER = [
+    'Pre-KG', 'LKG', 'UKG',
+    'Grade 1', 'Grade 2', 'Grade 3', 'Grade 4', 'Grade 5',
+    'Grade 6', 'Grade 7', 'Grade 8', 'Grade 9', 'Grade 10',
+  ];
+
+  private nextGrade(current: string): string | null {
+    const idx = this.GRADE_ORDER.indexOf(current);
+    if (idx === -1 || idx === this.GRADE_ORDER.length - 1) return null;
+    return this.GRADE_ORDER[idx + 1];
+  }
+
+  // Preview: show what will happen when promoted
+  async getPromotionPreview(grade: string, section: string) {
+    const students = await this.studentRepo.find({
+      where: { current_class: grade, section, is_active: true },
+      order: { name: 'ASC' },
+    });
+    const next = this.nextGrade(grade);
+    return {
+      current_grade: grade,
+      current_section: section,
+      next_grade: next,
+      student_count: students.length,
+      students: students.map(s => ({
+        id: s.id, name: s.name, admission_no: s.admission_no,
+        current_class: s.current_class, current_section: s.section,
+        promoted_to: next,
+      })),
+    };
+  }
+
+  // Execute promotion: move all students in a section to the next grade
+  // new_section is required — class teacher assigns new section
+  async promoteStudents(data: {
+    grade: string;
+    section: string;
+    new_section: string;
+    student_ids?: string[]; // if empty, promotes all in section
+  }) {
+    const next = this.nextGrade(data.grade);
+    if (!next) return { error: `${data.grade} is the final grade. Cannot promote further.` };
+
+    const query: any = { current_class: data.grade, section: data.section, is_active: true };
+    const students = data.student_ids?.length
+      ? await this.studentRepo.findByIds(data.student_ids)
+      : await this.studentRepo.find({ where: query, order: { name: 'ASC' } });
+
+    let promoted = 0;
+    for (const student of students) {
+      await this.studentRepo.update(student.id, {
+        current_class: next,
+        section: data.new_section,
+      });
+      promoted++;
+    }
+
+    return {
+      success: true,
+      promoted_count: promoted,
+      from_grade: data.grade,
+      from_section: data.section,
+      to_grade: next,
+      to_section: data.new_section,
+      message: `${promoted} students promoted from ${data.grade} ${data.section} to ${next} ${data.new_section}`,
+    };
+  }
+
+  // Get all sections for a grade (for promotion UI)
+  async getSectionsForGrade(grade: string) {
+    const students = await this.studentRepo.find({
+      where: { current_class: grade, is_active: true },
+    });
+    const sections = [...new Set(students.map(s => s.section).filter(Boolean))].sort();
+    return { grade, sections };
+  }
+
   // Get stats
   async getStats() {
     const total = await this.studentRepo.count({ where: { is_active: true } });

@@ -46,6 +46,22 @@ function calcBandDist(percentages: number[]) {
 function safeNum(val: number | null | undefined): number {
   return val ?? 0;
 }
+function getAdvancingRetracting(students: { student_name: string; section?: string | undefined; grand_percentage: number | null }[], prevStudents: { student_name: string; grand_percentage: number }[]) {
+
+  const advancing: any[] = [];
+  const retracting: any[] = [];
+  students.forEach(s => {
+    const prev = prevStudents.find(p => p.student_name === s.student_name);
+    if (!prev) return;
+    const diff = +((s.grand_percentage ?? 0) - prev.grand_percentage).toFixed(2);
+    if (diff > 0) advancing.push({ ...s, prev_percentage: prev.grand_percentage, change: diff });
+    else if (diff < 0) retracting.push({ ...s, prev_percentage: prev.grand_percentage, change: diff });
+  });
+  return {
+    advancing: advancing.sort((a, b) => b.change - a.change),
+    retracting: retracting.sort((a, b) => a.change - b.change),
+  };
+}
 
 @Injectable()
 export class PasaService {
@@ -431,6 +447,71 @@ export class PasaService {
       passFail[sub] = { pass, fail, absent, pass_pct: total > 0 ? +((pass / total) * 100).toFixed(1) : 0 };
     });
 
+    // ── ADVANCING / RETRACTING (exam-to-exam within year) ──────
+    const currentExamIdxSec = EXAM_ORDER.indexOf(exam_type);
+    let secAdvancing: any[] = [];
+    let secRetracting: any[] = [];
+    let secYoyAdvancing: any[] = [];
+    let secYoyRetracting: any[] = [];
+
+    if (currentExamIdxSec > 0) {
+      const prevExamType = EXAM_ORDER[currentExamIdxSec - 1];
+      const prevMarks = await this.marksRepo.find({
+        where: { academic_year, exam_type: prevExamType, grade, section, is_active: true },
+      });
+      if (prevMarks.length) {
+        const prevPcts = [...new Set(prevMarks.map(m => m.student_name))].map(name => {
+          const sm = prevMarks.filter(m => m.student_name === name && !m.is_absent);
+          const to = sm.reduce((s, m) => s + safeNum(m.marks_obtained), 0);
+          const tm = sm.reduce((s, m) => s + safeNum(m.max_marks), 0);
+          return { student_name: name, grand_percentage: tm > 0 ? +((to / tm) * 100).toFixed(2) : 0 };
+        });
+        const r = getAdvancingRetracting(sortedHighToLow, prevPcts);
+        secAdvancing = r.advancing;
+        secRetracting = r.retracting;
+      }
+    }
+
+    // ── YEAR-OVER-YEAR ──────────────────────────────────────────
+    const [startYearSec] = academic_year.split('-');
+    const prevYearSec = `${+startYearSec - 1}-${String(+startYearSec).slice(2)}`;
+    const prevYearMarksSec = await this.marksRepo.find({
+      where: { academic_year: prevYearSec, exam_type, grade, section, is_active: true },
+    });
+    if (prevYearMarksSec.length) {
+      const prevYearPcts = [...new Set(prevYearMarksSec.map(m => m.student_name))].map(name => {
+        const sm = prevYearMarksSec.filter(m => m.student_name === name && !m.is_absent);
+        const to = sm.reduce((s, m) => s + safeNum(m.marks_obtained), 0);
+        const tm = sm.reduce((s, m) => s + safeNum(m.max_marks), 0);
+        return { student_name: name, grand_percentage: tm > 0 ? +((to / tm) * 100).toFixed(2) : 0 };
+      });
+      const yoy = getAdvancingRetracting(sortedHighToLow, prevYearPcts);
+      secYoyAdvancing = yoy.advancing;
+      secYoyRetracting = yoy.retracting;
+    }
+
+    // ── LONGITUDINAL WITHIN YEAR ────────────────────────────────
+    const secLongitudinal: any[] = [];
+    for (const exam of EXAM_ORDER) {
+      const examMarks = await this.marksRepo.find({
+        where: { academic_year, exam_type: exam, grade, section, is_active: true },
+      });
+      if (!examMarks.length) continue;
+      const examStudents = [...new Set(examMarks.map(m => m.student_name))];
+      const examPcts = examStudents.map(name => {
+        const sm = examMarks.filter(m => m.student_name === name && !m.is_absent);
+        const to = sm.reduce((s, m) => s + safeNum(m.marks_obtained), 0);
+        const tm = sm.reduce((s, m) => s + safeNum(m.max_marks), 0);
+        return tm > 0 ? (to / tm) * 100 : 0;
+      });
+      const examSubjectAvgs: Record<string, number> = {};
+      subjects.forEach(sub => {
+        const vals = examMarks.filter(m => m.subject === sub && !m.is_absent && m.percentage !== null).map(m => safeNum(m.percentage));
+        examSubjectAvgs[sub] = avg(vals);
+      });
+      secLongitudinal.push({ exam, overall: avg(examPcts), ...examSubjectAvgs });
+    }
+
     return {
       grade, section, exam_type, academic_year,
       total_students: studentNames.length,
@@ -444,6 +525,11 @@ export class PasaService {
       students_alphabetical: studentRows,
       students_ranked: sortedHighToLow,
       grade_bands: GRADE_BANDS,
+      advancing: secAdvancing,
+      retracting: secRetracting,
+      yoy_advancing: secYoyAdvancing,
+      yoy_retracting: secYoyRetracting,
+      longitudinal: secLongitudinal,
     };
   }
 
@@ -512,6 +598,76 @@ export class PasaService {
     }).sort((a, b) => b.grand_percentage - a.grand_percentage)
       .map((s, i) => ({ ...s, rank: i + 1 }));
 
+    // ── OVERALL BAND DISTRIBUTION ──────────────────────────────
+    const allGrandPcts = studentGrandPcts.map(s => s.grand_percentage);
+    const overallBandDist = calcBandDist(allGrandPcts);
+    const gradeAvg = avg(allGrandPcts);
+
+    // ── ADVANCING / RETRACTING (exam-to-exam within year) ──────
+    const currentExamIdx = EXAM_ORDER.indexOf(exam_type);
+    let advancing: any[] = [];
+    let retracting: any[] = [];
+
+    if (currentExamIdx > 0) {
+      const prevExamType = EXAM_ORDER[currentExamIdx - 1];
+      const prevMarks = await this.marksRepo.find({
+        where: { academic_year, exam_type: prevExamType, grade, is_active: true },
+      });
+      if (prevMarks.length) {
+        const prevStudentPcts = [...new Set(prevMarks.map(m => m.student_name))].map(name => {
+          const sm = prevMarks.filter(m => m.student_name === name && !m.is_absent);
+          const to = sm.reduce((s, m) => s + safeNum(m.marks_obtained), 0);
+          const tm = sm.reduce((s, m) => s + safeNum(m.max_marks), 0);
+          return { student_name: name, grand_percentage: tm > 0 ? +((to / tm) * 100).toFixed(2) : 0 };
+        });
+        const result = getAdvancingRetracting(studentGrandPcts, prevStudentPcts);
+        advancing = result.advancing;
+        retracting = result.retracting;
+      }
+    }
+
+    // ── YEAR-OVER-YEAR ADVANCING / RETRACTING ──────────────────
+    let yoyAdvancing: any[] = [];
+    let yoyRetracting: any[] = [];
+    const [startYear] = academic_year.split('-');
+    const prevYear = `${+startYear - 1}-${String(+startYear).slice(2)}`;
+    const prevYearMarks = await this.marksRepo.find({
+      where: { academic_year: prevYear, exam_type, grade, is_active: true },
+    });
+    if (prevYearMarks.length) {
+      const prevYearPcts = [...new Set(prevYearMarks.map(m => m.student_name))].map(name => {
+        const sm = prevYearMarks.filter(m => m.student_name === name && !m.is_absent);
+        const to = sm.reduce((s, m) => s + safeNum(m.marks_obtained), 0);
+        const tm = sm.reduce((s, m) => s + safeNum(m.max_marks), 0);
+        return { student_name: name, grand_percentage: tm > 0 ? +((to / tm) * 100).toFixed(2) : 0 };
+      });
+      const yoyResult = getAdvancingRetracting(studentGrandPcts, prevYearPcts);
+      yoyAdvancing = yoyResult.advancing;
+      yoyRetracting = yoyResult.retracting;
+    }
+
+    // ── LONGITUDINAL (all exams within year) ───────────────────
+    const longitudinal: any[] = [];
+    for (const exam of EXAM_ORDER) {
+      const examMarks = await this.marksRepo.find({
+        where: { academic_year, exam_type: exam, grade, is_active: true },
+      });
+      if (!examMarks.length) continue;
+      const examStudents = [...new Set(examMarks.map(m => m.student_name))];
+      const examPcts = examStudents.map(name => {
+        const sm = examMarks.filter(m => m.student_name === name && !m.is_absent);
+        const to = sm.reduce((s, m) => s + safeNum(m.marks_obtained), 0);
+        const tm = sm.reduce((s, m) => s + safeNum(m.max_marks), 0);
+        return tm > 0 ? (to / tm) * 100 : 0;
+      });
+      const examSubjectAvgs: Record<string, number> = {};
+      subjects.forEach(sub => {
+        const vals = examMarks.filter(m => m.subject === sub && !m.is_absent && m.percentage !== null).map(m => safeNum(m.percentage));
+        examSubjectAvgs[sub] = avg(vals);
+      });
+      longitudinal.push({ exam, overall: avg(examPcts), ...examSubjectAvgs });
+    }
+
     return {
       grade, exam_type, academic_year,
       sections, subjects,
@@ -519,9 +675,16 @@ export class PasaService {
       subject_averages: subjectAverages,
       subject_section_avg: subjectSectionAvg,
       band_distribution: bandDistribution,
+      overall_band_distribution: overallBandDist,
+      grade_avg: gradeAvg,
       top10: studentGrandPcts.slice(0, 10),
       bottom10: studentGrandPcts.slice(-10).reverse(),
       grade_bands: GRADE_BANDS,
+      advancing,
+      retracting,
+      yoy_advancing: yoyAdvancing,
+      yoy_retracting: yoyRetracting,
+      longitudinal,
     };
   }
 

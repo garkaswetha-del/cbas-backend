@@ -162,4 +162,28 @@ export class ActivitiesController {
   getConsecutiveDecline(@Query('academic_year') academic_year: string) {
     return this.activitiesService.getConsecutiveDeclineStudents(academic_year || '2025-26');
   }
+
+  // ── LONGITUDINAL ACROSS ALL GRADES ───────────────────────────
+  @Get('longitudinal/student/:student_id')
+  getStudentLongitudinal(@Param('student_id') student_id: string) {
+    return this.activitiesService.getStudentLongitudinal(student_id);
+  }
+
+  // ── COVERAGE ─────────────────────────────────────────────────
+  @Get('coverage/student/:student_id')
+  getStudentCoverage(
+    @Param('student_id') student_id: string,
+    @Query('academic_year') academic_year: string,
+  ) {
+    return this.activitiesService.getStudentCoverage(student_id, academic_year || '2025-26');
+  }
+
+  @Get('coverage/section/:grade/:section')
+  getSectionCoverage(
+    @Param('grade') grade: string,
+    @Param('section') section: string,
+    @Query('academic_year') academic_year: string,
+  ) {
+    return this.activitiesService.getSectionCoverage(grade, section, academic_year || '2025-26');
+  }
 }

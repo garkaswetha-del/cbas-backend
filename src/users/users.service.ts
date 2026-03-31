@@ -100,4 +100,45 @@ export class UsersService {
     await this.userRepo.delete(id);
     return { message: 'User deleted permanently' };
   }
-}
+  async login(email: string, password: string) {
+    // Check hardcoded admin first
+    if (email === 'garkaswetha@gmail.com' && password === 'swetha123') {
+      return {
+        success: true,
+        user: {
+          id: 'admin-principal',
+          name: 'Swetha Garka',
+          email: 'garkaswetha@gmail.com',
+          role: 'principal',
+        },
+      };
+    }
+
+    const user = await this.userRepo.findOne({ where: { email, is_active: true } });
+    if (!user) throw new NotFoundException('User not found');
+
+    // Check plain text password (stored during import)
+    const plainMatch = user.password && user.password === password;
+    // Check bcrypt hash
+    const hashMatch = await bcrypt.compare(password, user.password_hash);
+
+    if (!plainMatch && !hashMatch) {
+      throw new NotFoundException('Invalid password');
+    }
+
+    return {
+      success: true,
+      user: {
+        id: user.id,
+        name: user.name,
+        email: user.email,
+        role: user.role,
+        photo: user.photo,
+        subjects: user.subjects,
+        assigned_classes: user.assigned_classes,
+        assigned_sections: user.assigned_sections,
+        class_teacher_of: user.class_teacher_of,
+      },
+    };
+  }
+} 

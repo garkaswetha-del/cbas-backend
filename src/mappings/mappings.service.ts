@@ -138,4 +138,71 @@ export class MappingsService {
       order: { grade: 'ASC', section: 'ASC', teacher_name: 'ASC' },
     });
   }
+
+  // Get structured mappings for Teacher Dashboard — reads from User entity
+  async getTeacherDashboardMappings(teacher_id: string, academic_year: string) {
+    const user = await this.userRepo.findOne({ where: { id: teacher_id } });
+    if (!user) return { teacher_id, academic_year, is_class_teacher: false, class_grade: null, class_section: null, mappings: [] };
+
+    const subjects: string[] = user.subjects || [];
+    const classes: string[] = user.assigned_classes || [];
+    const sections: string[] = user.assigned_sections || [];
+    const classTeacherOf: string = user.class_teacher_of || '';
+
+    // Parse class_teacher_of e.g. "Grade 5 Kaveri" → grade="Grade 5", section="Kaveri"
+    let class_grade: string | null = null;
+    let class_section: string | null = null;
+    if (classTeacherOf) {
+      // Try to extract last word as section, rest as grade
+      const parts = classTeacherOf.trim().split(' ');
+      if (parts.length >= 2) {
+        class_section = parts[parts.length - 1];
+        // Find matching grade from assigned_classes
+        class_grade = classes.find(c => classTeacherOf.toLowerCase().includes(c.toLowerCase())) || parts.slice(0, -1).join(' ');
+      }
+    }
+
+    // Build mappings: every combination of class × section × subject
+    const mappings: any[] = [];
+    const seen = new Set<string>();
+
+    if (classes.length && sections.length) {
+      for (const grade of classes) {
+        for (const section of sections) {
+          if (subjects.length) {
+            for (const subject of subjects) {
+              const key = `${grade}||${section}||${subject}`;
+              if (!seen.has(key)) {
+                seen.add(key);
+                mappings.push({
+                  grade,
+                  section,
+                  subject,
+                  is_class_teacher: !!(class_grade && class_section &&
+                    grade.toLowerCase().includes(class_grade.toLowerCase().replace('grade', '').trim()) &&
+                    section === class_section),
+                });
+              }
+            }
+          } else {
+            // No subjects — still show the grade/section combo
+            const key = `${grade}||${section}||`;
+            if (!seen.has(key)) {
+              seen.add(key);
+              mappings.push({ grade, section, subject: null, is_class_teacher: false });
+            }
+          }
+        }
+      }
+    }
+
+    return {
+      teacher_id,
+      academic_year,
+      is_class_teacher: !!classTeacherOf,
+      class_grade,
+      class_section,
+      mappings,
+    };
+  }
 }

@@ -18,6 +18,14 @@ export class MappingsController {
     return this.mappingsService.getTeacherMappings(id, ay);
   }
 
+  @Get('teacher/:teacher_id/dashboard')
+  getTeacherDashboardMappings(
+    @Param('teacher_id') id: string,
+    @Query('academic_year') ay: string,
+  ) {
+    return this.mappingsService.getTeacherDashboardMappings(id, ay);
+  }
+
   @Get('all')
   getAllMappings(@Query('academic_year') ay: string) {
     return this.mappingsService.getAllMappings(ay);
