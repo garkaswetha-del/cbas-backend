@@ -10,9 +10,9 @@ export class UsersController {
     return this.usersService.findAll(role);
   }
 
-  @Get(':id')
-  findOne(@Param('id') id: string) {
-    return this.usersService.findOne(id);
+  @Post('login')
+  login(@Body() body: { email: string; password: string }) {
+    return this.usersService.login(body.email, body.password);
   }
 
   @Post()
@@ -20,9 +20,9 @@ export class UsersController {
     return this.usersService.create(body);
   }
 
-  @Post('login')
-  login(@Body() body: { email: string; password: string }) {
-    return this.usersService.login(body.email, body.password);
+  @Get(':id')
+  findOne(@Param('id') id: string) {
+    return this.usersService.findOne(id);
   }
 
   @Patch(':id')
