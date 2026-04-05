@@ -204,10 +204,13 @@ export class ActivitiesService {
   async getMarksForActivity(activity_id: string, academic_year: string) {
     const activity = await this.activityRepo.findOne({ where: { id: activity_id } });
     if (!activity) return null;
-    const students = await this.studentRepo.find({
-      where: { current_class: activity.grade, section: activity.section, is_active: true },
-      order: { name: 'ASC' },
-    });
+    const students = await this.studentRepo
+      .createQueryBuilder('student')
+      .where('LOWER(student.current_class) = LOWER(:grade)', { grade: activity.grade })
+      .andWhere('LOWER(student.section) = LOWER(:section)', { section: activity.section })
+      .andWhere('student.is_active = :active', { active: true })
+      .orderBy('student.name', 'ASC')
+      .getMany();
     const assessments = await this.assessmentRepo.find({ where: { activity_id, academic_year } });
     const competencies = await this.competencyRepo.find({
       where: { is_active: true },

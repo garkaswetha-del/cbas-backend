@@ -20,10 +20,10 @@ export class StudentsService {
       .where('student.is_active = :active', { active: true });
 
     if (filters?.grade) {
-      query.andWhere('student.current_class = :grade', { grade: filters.grade });
+      query.andWhere('LOWER(student.current_class) = LOWER(:grade)', { grade: filters.grade });
     }
     if (filters?.section) {
-      query.andWhere('student.section = :section', { section: filters.section });
+      query.andWhere('LOWER(student.section) = LOWER(:section)', { section: filters.section });
     }
     if (filters?.search) {
       query.andWhere('student.name ILIKE :search', { search: `%${filters.search}%` });

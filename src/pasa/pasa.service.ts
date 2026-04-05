@@ -195,10 +195,13 @@ export class PasaService {
   }
 
   async getMarksTable(academic_year: string, exam_type: string, grade: string, section: string) {
-    const students = await this.studentRepo.find({
-      where: { current_class: grade, section, is_active: true },
-      order: { name: 'ASC' },
-    });
+    const students = await this.studentRepo
+      .createQueryBuilder('student')
+      .where('LOWER(student.current_class) = LOWER(:grade)', { grade })
+      .andWhere('LOWER(student.section) = LOWER(:section)', { section })
+      .andWhere('student.is_active = :active', { active: true })
+      .orderBy('student.name', 'ASC')
+      .getMany();
 
     const configs = await this.configRepo.find({
       where: { academic_year, exam_type, grade, is_active: true },

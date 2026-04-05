@@ -75,4 +75,28 @@ export class BaselineController {
   getConsecutiveDeclineTeachers(@Query('academic_year') academic_year: string) {
     return this.baselineService.getConsecutiveDeclineTeachers(academic_year);
   }
+
+  // ── Multi-round endpoints (Teacher entry) ─────────────────────
+
+  @Get('section/rounds')
+  getSectionRounds(
+    @Query('grade') grade: string,
+    @Query('section') section: string,
+    @Query('academic_year') academic_year: string,
+  ) {
+    return this.baselineService.getSectionRounds(grade, section, academic_year || '2025-26');
+  }
+
+  @Post('section/round')
+  saveSectionRound(@Body() body: any) {
+    return this.baselineService.saveSectionRound(body);
+  }
+
+  @Get('student/:student_id/rounds')
+  getStudentRounds(
+    @Param('student_id') student_id: string,
+    @Query('academic_year') academic_year: string,
+  ) {
+    return this.baselineService.getStudentRounds(student_id, academic_year || '2025-26');
+  }
 }

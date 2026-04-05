@@ -6,8 +6,16 @@ export enum EntityType {
 }
 
 export enum AssessmentRound {
-  ROUND_1 = 'baseline_1',
-  ROUND_2 = 'baseline_2',
+  ROUND_1  = 'baseline_1',
+  ROUND_2  = 'baseline_2',
+  ROUND_3  = 'baseline_3',
+  ROUND_4  = 'baseline_4',
+  ROUND_5  = 'baseline_5',
+  ROUND_6  = 'baseline_6',
+  ROUND_7  = 'baseline_7',
+  ROUND_8  = 'baseline_8',
+  ROUND_9  = 'baseline_9',
+  ROUND_10 = 'baseline_10',
 }
 
 export enum AssessmentSubject {
@@ -16,10 +24,10 @@ export enum AssessmentSubject {
 }
 
 export enum AssessmentStage {
-  FOUNDATION = 'foundation',
+  FOUNDATION  = 'foundation',
   PREPARATORY = 'preparatory',
-  MIDDLE = 'middle',
-  SECONDARY = 'secondary',
+  MIDDLE      = 'middle',
+  SECONDARY   = 'secondary',
 }
 
 @Entity('baseline_assessments')
@@ -57,7 +65,6 @@ export class BaselineAssessment {
   @Column({ nullable: true })
   assessment_date: string;
 
-  // Literacy domains
   @Column({ type: 'decimal', precision: 5, scale: 2, nullable: true })
   listening_score: number;
 
@@ -70,7 +77,6 @@ export class BaselineAssessment {
   @Column({ type: 'decimal', precision: 5, scale: 2, nullable: true })
   writing_score: number;
 
-  // Numeracy domains
   @Column({ type: 'decimal', precision: 5, scale: 2, nullable: true })
   operations_score: number;
 
@@ -83,7 +89,6 @@ export class BaselineAssessment {
   @Column({ type: 'decimal', precision: 5, scale: 2, nullable: true })
   geometry_score: number;
 
-  // Calculated
   @Column({ type: 'decimal', precision: 5, scale: 2, nullable: true })
   literacy_total: number;
 
@@ -98,6 +103,12 @@ export class BaselineAssessment {
 
   @Column({ type: 'jsonb', nullable: true })
   gaps: object;
+
+  @Column({ default: false })
+  promoted: boolean;
+
+  @Column({ nullable: true })
+  promoted_to_stage: string;
 
   @Column({ nullable: true })
   created_by: string;

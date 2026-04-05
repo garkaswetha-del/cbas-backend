@@ -1,7 +1,7 @@
 import { Injectable } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
-import { BaselineAssessment, EntityType, AssessmentRound, AssessmentStage } from '../assessments/entities/baseline-assessment.entity/baseline-assessment.entity';
+import { BaselineAssessment, EntityType, AssessmentRound, AssessmentStage, AssessmentSubject } from '../assessments/entities/baseline-assessment.entity/baseline-assessment.entity';
 import { Student } from '../students/entities/student.entity/student.entity';
 import { User } from '../users/entities/user.entity/user.entity';
 import { LearningLink } from '../assessments/entities/learning-link.entity/learning-link.entity';
@@ -122,10 +122,13 @@ export class BaselineService {
   }
 
   async getSectionBaseline(grade: string, section: string, academic_year: string, round: string) {
-    const students = await this.studentRepo.find({
-      where: { current_class: grade, section, is_active: true },
-      order: { name: 'ASC' }
-    });
+    const students = await this.studentRepo
+      .createQueryBuilder('student')
+      .where('LOWER(student.current_class) = LOWER(:grade)', { grade })
+      .andWhere('LOWER(student.section) = LOWER(:section)', { section })
+      .andWhere('student.is_active = :active', { active: true })
+      .orderBy('student.name', 'ASC')
+      .getMany();
     const assessments = await this.baselineRepo.find({
       where: { grade, section, academic_year, round: round as AssessmentRound, entity_type: EntityType.STUDENT }
     });
@@ -443,5 +446,217 @@ export class BaselineService {
     });
 
     return declining.sort((a, b) => b.drop - a.drop);
+  }
+
+  // ── MULTI-ROUND STUDENT BASELINE (Teacher Entry) ─────────────
+
+  // Returns all rounds for a section grouped by student — for class marksheet view
+  async getSectionRounds(grade: string, section: string, academic_year: string) {
+    let students = await this.studentRepo
+      .createQueryBuilder('student')
+      .where('LOWER(student.current_class) = LOWER(:grade)', { grade })
+      .andWhere('LOWER(student.section) = LOWER(:section)', { section })
+      .andWhere('student.is_active = :active', { active: true })
+      .orderBy('student.name', 'ASC')
+      .getMany();
+    const assessments = await this.baselineRepo.find({
+      where: { grade, section, academic_year, entity_type: EntityType.STUDENT },
+      order: { round: 'ASC' },
+    });
+
+    const ROUND_ORDER = ['baseline_1','baseline_2','baseline_3','baseline_4','baseline_5',
+      'baseline_6','baseline_7','baseline_8','baseline_9','baseline_10'];
+
+    // Get all rounds that have data
+    const allRounds = [...new Set(assessments.map(a => a.round))].sort(
+      (a, b) => ROUND_ORDER.indexOf(a) - ROUND_ORDER.indexOf(b)
+    );
+
+    const studentData = students.map(student => {
+      const rounds = allRounds.map(round => {
+        const a = assessments.find(x => x.entity_id === student.id && x.round === round);
+        if (!a) return { round, exists: false };
+        return {
+          round,
+          exists: true,
+          date: a.assessment_date,
+          stage: a.stage,
+          promoted: a.promoted,
+          promoted_to_stage: a.promoted_to_stage,
+          literacy: {
+            Listening: +(+a.listening_score || 0),
+            Speaking:  +(+a.speaking_score  || 0),
+            Reading:   +(+a.reading_score   || 0),
+            Writing:   +(+a.writing_score   || 0),
+            avg:       a.literacy_total ? +(+a.literacy_total) : 0,
+          },
+          numeracy: {
+            Operations:  +(+a.operations_score   || 0),
+            'Base 10':   +(+a.base10_score       || 0),
+            Measurement: +(+a.measurement_score  || 0),
+            Geometry:    +(+a.geometry_score      || 0),
+            avg:         a.numeracy_total ? +(+a.numeracy_total) : 0,
+          },
+          overall: a.overall_score ? +(+a.overall_score) : 0,
+          level: a.level,
+        };
+      });
+      return { student_id: student.id, student_name: student.name, rounds };
+    });
+
+    return {
+      grade, section, academic_year,
+      total_rounds: allRounds.length,
+      next_round: `baseline_${allRounds.length + 1}`,
+      round_labels: allRounds.map((r, i) => `Round ${i + 1}`),
+      rounds: allRounds,
+      students: studentData,
+    };
+  }
+
+  // Save a full round of marks for all students in a section
+  async saveSectionRound(data: {
+    grade: string;
+    section: string;
+    academic_year: string;
+    round: string;      // e.g. "baseline_1"
+    stage: string;      // e.g. "foundation"
+    assessment_date: string;
+    entries: {
+      student_id: string;
+      student_name: string;
+      literacy: { Listening: number; Speaking: number; Reading: number; Writing: number };
+      numeracy: { Operations: number; 'Base 10': number; Measurement: number; Geometry: number };
+    }[];
+  }) {
+    const results = { saved: 0, failed: 0 };
+    const round = data.round as AssessmentRound;
+    const stage = data.stage as AssessmentStage;
+
+    for (const entry of data.entries) {
+      try {
+        const litScores = {
+          listening_score:  entry.literacy.Listening,
+          speaking_score:   entry.literacy.Speaking,
+          reading_score:    entry.literacy.Reading,
+          writing_score:    entry.literacy.Writing,
+        };
+        const numScores = {
+          operations_score:  entry.numeracy.Operations,
+          base10_score:      entry.numeracy['Base 10'],
+          measurement_score: entry.numeracy.Measurement,
+          geometry_score:    entry.numeracy.Geometry,
+        };
+        const all = { ...litScores, ...numScores };
+        const { literacy_total, numeracy_total, overall_score } = this.calculateTotals(all);
+        const level = overall_score !== undefined ? this.getLevel(overall_score) : undefined;
+        const litGaps = this.getGaps(all, 'literacy');
+        const numGaps = this.getGaps(all, 'numeracy');
+
+        // Check promotion (80% threshold — same as Python app)
+        const litAvg = literacy_total ?? 0;
+        const numAvg = numeracy_total ?? 0;
+        const overallAvg = overall_score ?? 0;
+        const promoted = overallAvg >= 80;
+
+        const STAGE_ORDER = ['foundation', 'preparatory', 'middle', 'secondary'];
+        const stageIdx = STAGE_ORDER.indexOf(data.stage);
+        const promoted_to_stage = promoted && stageIdx < 3 ? STAGE_ORDER[stageIdx + 1] : null;
+
+        const existing = await this.baselineRepo.findOne({
+          where: { entity_id: entry.student_id, academic_year: data.academic_year, round, entity_type: EntityType.STUDENT },
+        });
+
+        const record: any = {
+          entity_type: EntityType.STUDENT,
+          entity_id: entry.student_id,
+          entity_name: entry.student_name,
+          grade: data.grade,
+          section: data.section,
+          academic_year: data.academic_year,
+          round,
+          subject: AssessmentSubject.LITERACY,
+          stage,
+          assessment_date: data.assessment_date,
+          ...litScores,
+          ...numScores,
+          literacy_total,
+          numeracy_total,
+          overall_score,
+          level,
+          gaps: { literacy: litGaps, numeracy: numGaps },
+          promoted,
+          promoted_to_stage,
+        };
+
+        if (existing) {
+          await this.baselineRepo.update(existing.id, record);
+        } else {
+          await this.baselineRepo.save(this.baselineRepo.create(record));
+        }
+        results.saved++;
+      } catch { results.failed++; }
+    }
+    return results;
+  }
+
+  // Get all rounds for one student — for student profile view
+  async getStudentRounds(student_id: string, academic_year: string) {
+    const student = await this.studentRepo.findOne({ where: { id: student_id } });
+    const assessments = await this.baselineRepo.find({
+      where: { entity_id: student_id, academic_year, entity_type: EntityType.STUDENT },
+      order: { round: 'ASC' },
+    });
+
+    const ROUND_ORDER = ['baseline_1','baseline_2','baseline_3','baseline_4','baseline_5',
+      'baseline_6','baseline_7','baseline_8','baseline_9','baseline_10'];
+
+    const rounds = assessments
+      .sort((a, b) => ROUND_ORDER.indexOf(a.round) - ROUND_ORDER.indexOf(b.round))
+      .map((a, i) => ({
+        round_number: i + 1,
+        round: a.round,
+        date: a.assessment_date,
+        stage: a.stage,
+        promoted: a.promoted,
+        promoted_to_stage: a.promoted_to_stage,
+        scores: {
+          literacy: {
+            Listening: +(+a.listening_score || 0),
+            Speaking:  +(+a.speaking_score  || 0),
+            Reading:   +(+a.reading_score   || 0),
+            Writing:   +(+a.writing_score   || 0),
+          },
+          numeracy: {
+            Operations:  +(+a.operations_score   || 0),
+            'Base 10':   +(+a.base10_score       || 0),
+            Measurement: +(+a.measurement_score  || 0),
+            Geometry:    +(+a.geometry_score      || 0),
+          },
+        },
+        literacy_avg: a.literacy_total ? +(+a.literacy_total) : 0,
+        numeracy_avg: a.numeracy_total ? +(+a.numeracy_total) : 0,
+        overall: a.overall_score ? +(+a.overall_score) : 0,
+        level: a.level,
+        gaps: a.gaps,
+      }));
+
+    // Strengths (≥80%) and weaknesses (<60%) across all rounds rolling avg
+    const domainScores: Record<string, number[]> = {};
+    const LITERACY_DOMAINS = ['Listening','Speaking','Reading','Writing'];
+    const NUMERACY_DOMAINS = ['Operations','Base 10','Measurement','Geometry'];
+    for (const r of rounds) {
+      for (const d of LITERACY_DOMAINS) { domainScores[d] = domainScores[d] || []; domainScores[d].push(r.scores.literacy[d] || 0); }
+      for (const d of NUMERACY_DOMAINS) { domainScores[d] = domainScores[d] || []; domainScores[d].push(r.scores.numeracy[d] || 0); }
+    }
+    const strengths: string[] = [];
+    const weaknesses: string[] = [];
+    Object.entries(domainScores).forEach(([domain, vals]) => {
+      const avg = vals.reduce((a, b) => a + b, 0) / vals.length;
+      if (avg >= 80) strengths.push(`${domain} — ${avg.toFixed(0)}%`);
+      else if (avg < 60) weaknesses.push(`${domain} — ${avg.toFixed(0)}%`);
+    });
+
+    return { student, rounds, strengths, weaknesses };
   }
 }
