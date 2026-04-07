@@ -129,6 +129,16 @@ export class PasaController {
   ) {
     return this.pasaService.searchStudents(ay, q);
   }
+
+  @Get('portfolio/student/:student_id')
+  getStudentPortfolio(
+    @Param('student_id') student_id: string,
+    @Query('subjects') subjects: string,
+  ) {
+    const subjectList = subjects ? subjects.split(',').map(s => s.trim()) : [];
+    return this.pasaService.getStudentPortfolioPasa(student_id, subjectList);
+  }
+
 @Get('alerts/decline')
   getConsecutiveDecline(@Query('academic_year') ay: string) {
     return this.pasaService.getConsecutiveDeclineStudents(ay || '2025-26');

@@ -273,78 +273,123 @@ export class BaselineService {
 
   async getTeacherDashboard(academic_year: string, round: string) {
     const teachers = await this.userRepo.find({ where: { role: 'teacher' as any, is_active: true } });
+    // Get ALL assessments for this round — both literacy and numeracy records
     const assessments = await this.baselineRepo.find({
       where: { academic_year, round: round as AssessmentRound, entity_type: EntityType.TEACHER }
     });
     const avg = (arr: number[]) => arr.length ? +(arr.reduce((a, b) => a + b, 0) / arr.length).toFixed(1) : 0;
 
-    const teacherList = teachers.map(t => {
-      const assessment = assessments.find(a => a.entity_id === t.id);
-      return { teacher_id: t.id, teacher_name: t.name, assessment: assessment || null };
+    // Group by teacher — each teacher may have lit + num records
+    const byTeacher: Record<string, { lit?: any; num?: any }> = {};
+    assessments.forEach(a => {
+      if (!byTeacher[a.entity_id]) byTeacher[a.entity_id] = {};
+      if (a.subject === 'literacy') byTeacher[a.entity_id].lit = a;
+      else if (a.subject === 'numeracy') byTeacher[a.entity_id].num = a;
     });
 
-    const assessed = assessments.length;
+    // Compute per-teacher averages
+    const litDomains = ['listening_score','speaking_score','reading_score','writing_score'];
+    const numDomains = ['operations_score','base10_score','measurement_score','geometry_score'];
+
+    const computeSubjAvg = (rec: any, domains: string[]) => {
+      if (!rec) return null;
+      const vals = domains.map(d => rec[d] ? +rec[d] : 0).filter(v => v > 0);
+      return vals.length ? +(vals.reduce((a,b)=>a+b,0)/vals.length).toFixed(1) : null;
+    };
+
+    const teacherStats = teachers.map(t => {
+      const recs = byTeacher[t.id] || {};
+      const litAvg = computeSubjAvg(recs.lit, litDomains);
+      const numAvg = computeSubjAvg(recs.num, numDomains);
+      const overall = litAvg !== null && numAvg !== null ? +((litAvg+numAvg)/2).toFixed(1)
+        : litAvg ?? numAvg ?? null;
+      return { teacher: t, lit: recs.lit, num: recs.num, litAvg, numAvg, overall };
+    });
+
+    const assessed = teacherStats.filter(t => t.overall !== null).length;
     const pending = teachers.length - assessed;
 
+    // Level distribution
     const levelDist = { L1: 0, L2: 0, L3: 0, L4: 0 };
-    assessments.forEach(a => {
-      if (!a.overall_score) return;
-      const s = +a.overall_score;
-      if (s >= 80) levelDist.L4++;
-      else if (s >= 60) levelDist.L3++;
-      else if (s >= 40) levelDist.L2++;
+    teacherStats.forEach(t => {
+      if (t.overall === null) return;
+      if (t.overall >= 80) levelDist.L4++;
+      else if (t.overall >= 60) levelDist.L3++;
+      else if (t.overall >= 40) levelDist.L2++;
       else levelDist.L1++;
     });
 
+    // Domain averages across all teachers
     const domainAvgs = {
-      Listening: avg(assessments.filter(a => a.listening_score).map(a => +a.listening_score)),
-      Speaking: avg(assessments.filter(a => a.speaking_score).map(a => +a.speaking_score)),
-      Reading: avg(assessments.filter(a => a.reading_score).map(a => +a.reading_score)),
-      Writing: avg(assessments.filter(a => a.writing_score).map(a => +a.writing_score)),
-      Operations: avg(assessments.filter(a => a.operations_score).map(a => +a.operations_score)),
-      'Base 10': avg(assessments.filter(a => a.base10_score).map(a => +a.base10_score)),
-      Measurement: avg(assessments.filter(a => a.measurement_score).map(a => +a.measurement_score)),
-      Geometry: avg(assessments.filter(a => a.geometry_score).map(a => +a.geometry_score)),
+      Listening:   avg(assessments.filter(a=>a.subject==='literacy'&&a.listening_score).map(a=>+a.listening_score)),
+      Speaking:    avg(assessments.filter(a=>a.subject==='literacy'&&a.speaking_score).map(a=>+a.speaking_score)),
+      Reading:     avg(assessments.filter(a=>a.subject==='literacy'&&a.reading_score).map(a=>+a.reading_score)),
+      Writing:     avg(assessments.filter(a=>a.subject==='literacy'&&a.writing_score).map(a=>+a.writing_score)),
+      Operations:  avg(assessments.filter(a=>a.subject==='numeracy'&&a.operations_score).map(a=>+a.operations_score)),
+      'Base 10':   avg(assessments.filter(a=>a.subject==='numeracy'&&a.base10_score).map(a=>+a.base10_score)),
+      Measurement: avg(assessments.filter(a=>a.subject==='numeracy'&&a.measurement_score).map(a=>+a.measurement_score)),
+      Geometry:    avg(assessments.filter(a=>a.subject==='numeracy'&&a.geometry_score).map(a=>+a.geometry_score)),
     };
     const domainData = Object.entries(domainAvgs).map(([domain, score]) => ({ domain, score }));
 
+    // Stage distribution
     const stageMap: Record<string, number[]> = {};
     const stageAssessed: Record<string, number> = {};
-    assessments.forEach(a => {
-      const stage = a.stage || 'unknown';
-      if (!stageMap[stage]) stageMap[stage] = [];
-      if (a.overall_score) stageMap[stage].push(+a.overall_score);
-      stageAssessed[stage] = (stageAssessed[stage] || 0) + 1;
+    teacherStats.forEach(t => {
+      [t.lit, t.num].forEach(rec => {
+        if (!rec) return;
+        const stage = rec.stage || 'unknown';
+        if (!stageMap[stage]) stageMap[stage] = [];
+        const subAvg = rec.subject === 'literacy'
+          ? computeSubjAvg(rec, litDomains)
+          : computeSubjAvg(rec, numDomains);
+        if (subAvg !== null) stageMap[stage].push(subAvg);
+        stageAssessed[stage] = (stageAssessed[stage] || 0) + 1;
+      });
     });
-    const stageData = ['foundation', 'preparatory', 'middle', 'secondary'].map(stage => ({
+    const stageData = ['foundation','preparatory','middle','secondary'].map(stage => ({
       stage: stage.charAt(0).toUpperCase() + stage.slice(1),
       avg: avg(stageMap[stage] || []),
       assessed: stageAssessed[stage] || 0,
     }));
 
-    const litScores = assessments.filter(a => a.literacy_total).map(a => +a.literacy_total);
-    const numScores = assessments.filter(a => a.numeracy_total).map(a => +a.numeracy_total);
-    const overallScores = assessments.filter(a => a.overall_score).map(a => +a.overall_score);
+    // Per-teacher bar data
+    const teacherBarData = teacherStats
+      .filter(t => t.overall !== null)
+      .map(t => ({
+        name: t.teacher.name.split(' ')[0],
+        fullName: t.teacher.name,
+        literacy: t.litAvg ?? 0,
+        numeracy: t.numAvg ?? 0,
+        overall: t.overall ?? 0,
+      }));
 
-    // Bar chart data for literacy, numeracy, overall per teacher
-    const teacherBarData = teachers.map(t => {
-      const a = assessments.find(x => x.entity_id === t.id);
+    const teacherList = teachers.map(t => {
+      const st = teacherStats.find(s => s.teacher.id === t.id);
       return {
-        name: t.name.split(' ')[0],
-        fullName: t.name,
-        literacy: a?.literacy_total ? +(+a.literacy_total).toFixed(1) : 0,
-        numeracy: a?.numeracy_total ? +(+a.numeracy_total).toFixed(1) : 0,
-        overall: a?.overall_score ? +(+a.overall_score).toFixed(1) : 0,
+        teacher_id: t.id,
+        teacher_name: t.name,
+        litAvg: st?.litAvg ?? null,
+        numAvg: st?.numAvg ?? null,
+        overall: st?.overall ?? null,
+        litStage: st?.lit?.stage ?? null,
+        numStage: st?.num?.stage ?? null,
+        litPromoted: st?.lit?.promoted ?? false,
+        numPromoted: st?.num?.promoted ?? false,
       };
-    }).filter(t => t.overall > 0);
+    });
+
+    const litAvgs = teacherStats.filter(t=>t.litAvg!==null).map(t=>t.litAvg as number);
+    const numAvgs = teacherStats.filter(t=>t.numAvg!==null).map(t=>t.numAvg as number);
+    const overallAvgs = teacherStats.filter(t=>t.overall!==null).map(t=>t.overall as number);
 
     return {
       teacherList,
       totalTeachers: teachers.length,
       assessed, pending,
-      literacyAvg: avg(litScores),
-      numeracyAvg: avg(numScores),
-      overallAvg: avg(overallScores),
+      literacyAvg: avg(litAvgs),
+      numeracyAvg: avg(numAvgs),
+      overallAvg: avg(overallAvgs),
       levelDist,
       domainData,
       stageData,
@@ -601,6 +646,42 @@ export class BaselineService {
   }
 
   // Get all rounds for one student — for student profile view
+  // Portfolio — fetch ALL years baseline for a student
+  async getStudentPortfolioBaseline(student_id: string) {
+    const student = await this.studentRepo.findOne({ where: { id: student_id } });
+    const assessments = await this.baselineRepo.find({
+      where: { entity_id: student_id, entity_type: EntityType.STUDENT },
+      order: { academic_year: 'ASC', round: 'ASC' },
+    });
+
+    // Group by academic_year
+    const byYear: Record<string, any[]> = {};
+    assessments.forEach(a => {
+      if (!byYear[a.academic_year]) byYear[a.academic_year] = [];
+      byYear[a.academic_year].push(a);
+    });
+
+    const years = Object.keys(byYear).sort().map(year => {
+      const recs = byYear[year];
+      const litRecs = recs.filter(r => r.subject === 'literacy' || !r.subject);
+      const numRecs = recs.filter(r => r.subject === 'numeracy');
+      const avg = (arr: number[]) => arr.length ? +(arr.reduce((a,b)=>a+b,0)/arr.length).toFixed(1) : null;
+
+      const litScores = litRecs.map(r => r.literacy_total || r.overall_score).filter(Boolean).map(Number);
+      const numScores = numRecs.map(r => r.numeracy_total || r.overall_score).filter(Boolean).map(Number);
+
+      return {
+        academic_year: year,
+        grade: recs[0]?.grade || null,
+        literacy: { avg: avg(litScores), records: litRecs, stage: litRecs[0]?.stage },
+        numeracy: { avg: avg(numScores), records: numRecs, stage: numRecs[0]?.stage },
+        rounds: recs.length,
+      };
+    });
+
+    return { student, years };
+  }
+
   async getStudentRounds(student_id: string, academic_year: string) {
     const student = await this.studentRepo.findOne({ where: { id: student_id } });
     const assessments = await this.baselineRepo.find({

@@ -189,6 +189,82 @@ export class StudentsService {
     return { grade, sections };
   }
 
+  // Get all sections across all grades
+  async getAllSections() {
+    const students = await this.studentRepo.find({ where: { is_active: true } });
+    const gradeMap: Record<string, Set<string>> = {};
+    students.forEach(s => {
+      if (!s.current_class || !s.section) return;
+      if (!gradeMap[s.current_class]) gradeMap[s.current_class] = new Set();
+      gradeMap[s.current_class].add(s.section);
+    });
+    const result: Record<string, string[]> = {};
+    for (const [grade, sections] of Object.entries(gradeMap)) {
+      result[grade] = [...sections].sort();
+    }
+    return result;
+  }
+
+  // Add a new section to a grade (by updating a placeholder or just returning)
+  async addSection(grade: string, section: string) {
+    // Check if section already exists
+    const existing = await this.studentRepo.findOne({
+      where: { current_class: grade, section }
+    });
+    if (existing) return { success: false, message: `Section ${section} already exists in ${grade}` };
+    // Section is stored at student level — we just record it as valid
+    // We return success so frontend can add it to its local list
+    return { success: true, grade, section, message: `Section ${section} added to ${grade}` };
+  }
+
+  // Remove a section (only if no active students in it)
+  async removeSection(grade: string, section: string) {
+    const count = await this.studentRepo.count({
+      where: { current_class: grade, section, is_active: true }
+    });
+    if (count > 0) return { success: false, message: `Cannot remove — ${count} active students in ${grade} ${section}` };
+    return { success: true, message: `Section ${section} removed from ${grade}` };
+  }
+
+  // Graduate Grade 10 students
+  async graduateStudents(data: {
+    grade: string;
+    section: string;
+    student_ids?: string[];
+    graduation_year: string;
+  }) {
+    const query: any = { current_class: data.grade, section: data.section, is_active: true };
+    const students = data.student_ids?.length
+      ? await this.studentRepo.findByIds(data.student_ids)
+      : await this.studentRepo.find({ where: query });
+
+    let graduated = 0;
+    for (const student of students) {
+      await this.studentRepo.update(student.id, {
+        is_active: false,
+        is_graduated: true,
+        graduation_year: data.graduation_year,
+      });
+      graduated++;
+    }
+    return {
+      success: true,
+      graduated,
+      grade: data.grade,
+      section: data.section,
+      graduation_year: data.graduation_year,
+      message: `${graduated} students graduated from ${data.grade} ${data.section}`,
+    };
+  }
+
+  // Get alumni
+  async getAlumni(graduation_year?: string) {
+    const where: any = { is_graduated: true };
+    if (graduation_year) where.graduation_year = graduation_year;
+    const alumni = await this.studentRepo.find({ where, order: { name: 'ASC' } });
+    return { total: alumni.length, alumni };
+  }
+
   // Get stats
   async getStats() {
     const total = await this.studentRepo.count({ where: { is_active: true } });

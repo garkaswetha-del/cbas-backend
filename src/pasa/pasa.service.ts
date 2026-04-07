@@ -973,4 +973,58 @@ async getConsecutiveDeclineStudents(academic_year: string) {
 
     return declining.sort((a, b) => b.drop - a.drop);
   }
+
+  // Portfolio — fetch ALL years PASA for a student
+  async getStudentPortfolioPasa(student_id: string, subjects?: string[]) {
+    // Fetch by student_id first, fallback to student_name
+    let allMarks = await this.marksRepo.find({
+      where: { student_id, is_active: true },
+      order: { academic_year: 'ASC', exam_type: 'ASC' },
+    });
+
+    // Filter by subjects if provided
+    if (subjects && subjects.length > 0) {
+      allMarks = allMarks.filter(m => subjects.includes(m.subject));
+    }
+
+    if (!allMarks.length) return { years: [] };
+
+    // Group by academic_year
+    const byYear: Record<string, any[]> = {};
+    allMarks.forEach(m => {
+      if (!byYear[m.academic_year]) byYear[m.academic_year] = [];
+      byYear[m.academic_year].push(m);
+    });
+
+    const years = Object.keys(byYear).sort().map(year => {
+      const marks = byYear[year];
+      const grade = marks[0]?.grade;
+      const examTypes = [...new Set(marks.map(m => m.exam_type))].sort();
+      const subjectsList = [...new Set(marks.map(m => m.subject))].sort();
+
+      const examSummary = examTypes.map(exam => {
+        const examMarks = marks.filter(m => m.exam_type === exam);
+        let to = 0, tm = 0;
+        const subjectData: Record<string, any> = {};
+        subjectsList.forEach(sub => {
+          const m = examMarks.find(x => x.subject === sub);
+          subjectData[sub] = {
+            marks: m ? safeNum(m.marks_obtained) : null,
+            max_marks: m ? safeNum(m.max_marks) : 100,
+            percentage: m ? safeNum(m.percentage) : null,
+          };
+          if (m && !m.is_absent && m.marks_obtained !== null) {
+            to += safeNum(m.marks_obtained);
+            tm += safeNum(m.max_marks);
+          }
+        });
+        const grand_pct = tm > 0 ? +((to/tm)*100).toFixed(2) : null;
+        return { exam, subjects: subjectData, grand_percentage: grand_pct };
+      });
+
+      return { academic_year: year, grade, subjects: subjectsList, exams: examSummary };
+    });
+
+    return { years };
+  }
 }

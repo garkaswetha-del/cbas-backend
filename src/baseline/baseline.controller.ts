@@ -92,6 +92,11 @@ export class BaselineController {
     return this.baselineService.saveSectionRound(body);
   }
 
+  @Get('student/:student_id/portfolio')
+  getStudentPortfolioBaseline(@Param('student_id') student_id: string) {
+    return this.baselineService.getStudentPortfolioBaseline(student_id);
+  }
+
   @Get('student/:student_id/rounds')
   getStudentRounds(
     @Param('student_id') student_id: string,

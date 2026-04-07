@@ -60,6 +60,12 @@ export class Student {
   @Column({ nullable: true })
   tc_date: string;
 
+  @Column({ nullable: true })
+  graduation_year: string;
+
+  @Column({ default: false })
+  is_graduated: boolean;
+
   @CreateDateColumn()
   created_at: Date;
 
