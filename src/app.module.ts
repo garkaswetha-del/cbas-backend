@@ -34,6 +34,8 @@ import { ExamConfig } from './pasa/entities/exam-config.entity/exam-config.entit
 import { ExamMarks } from './pasa/entities/exam-marks.entity/exam-marks.entity';
 import { MappingsModule } from './mappings/mappings.module';
 import { TeacherMapping } from './mappings/entities/teacher-mapping.entity/teacher-mapping.entity';
+import { HomeworkRecord } from './homework/entities/homework-record.entity';
+import { HomeworkModule } from './homework/homework.module';
 
 @Module({
   imports: [
@@ -64,7 +66,8 @@ import { TeacherMapping } from './mappings/entities/teacher-mapping.entity/teach
           TeacherObservation,
           ExamConfig,
           ExamMarks,
-          TeacherMapping, 
+          TeacherMapping,
+          HomeworkRecord,
         ],
         synchronize: true,
         logging: true,
@@ -87,6 +90,7 @@ import { TeacherMapping } from './mappings/entities/teacher-mapping.entity/teach
     ObservationModule,
     PasaModule,
     MappingsModule,
+    HomeworkModule,
   ],
 })
 export class AppModule {}
