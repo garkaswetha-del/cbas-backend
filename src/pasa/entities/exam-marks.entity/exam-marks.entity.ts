@@ -29,11 +29,22 @@ export class ExamMarks {
   @Column()
   subject: string;
 
-  @Column({ type: 'decimal', precision: 6, scale: 2, nullable: true })
-  marks_obtained: number | null;
+  @Column({ nullable: true })
+  exam_config_id: string;
 
-  @Column({ type: 'decimal', precision: 6, scale: 2, default: 100 })
-  max_marks: number;
+  @Column({ nullable: true })
+  teacher_id: string;
+
+  // Competency-wise marks
+  // [{ competency_id, competency_code, competency_name, marks_obtained, max_marks, percentage }]
+  @Column({ type: 'jsonb', default: '[]' })
+  competency_scores: object[];
+
+  @Column({ type: 'decimal', precision: 6, scale: 2, nullable: true })
+  total_obtained: number | null;
+
+  @Column({ type: 'decimal', precision: 6, scale: 2, default: 0 })
+  total_max: number;
 
   @Column({ type: 'decimal', precision: 6, scale: 2, nullable: true })
   percentage: number | null;

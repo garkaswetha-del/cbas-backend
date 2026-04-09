@@ -1,134 +1,144 @@
-import { Controller, Get, Post, Body, Param, Query, UploadedFile, UseInterceptors } from '@nestjs/common';
-import { FileInterceptor } from '@nestjs/platform-express';
+import { Controller, Get, Post, Delete, Body, Param, Query } from '@nestjs/common';
 import { PasaService } from './pasa.service';
 
 @Controller('pasa')
 export class PasaController {
   constructor(private readonly pasaService: PasaService) {}
 
-  // ── CONFIG ──────────────────────────────────────────────────
+  // ── EXAM CONFIG ──────────────────────────────────────────────
 
   @Post('config')
-  saveConfig(@Body() body: any) {
+  saveExamConfig(@Body() body: any) {
     return this.pasaService.saveExamConfig(body);
   }
 
   @Get('config')
-  getConfig(
-    @Query('academic_year') ay: string,
-    @Query('exam_type') et: string,
-    @Query('grade') grade: string,
+  getExamConfigs(
+    @Query('teacher_id') teacher_id: string,
+    @Query('academic_year') academic_year: string,
   ) {
-    return this.pasaService.getExamConfig(ay, et, grade);
+    return this.pasaService.getExamConfigs(teacher_id, academic_year || '2025-26');
   }
 
-  @Get('exam-types')
-  getExamTypes(
-    @Query('academic_year') ay: string,
+  @Get('config/entry')
+  getExamConfigForEntry(
     @Query('grade') grade: string,
+    @Query('section') section: string,
+    @Query('subject') subject: string,
+    @Query('exam_type') exam_type: string,
+    @Query('academic_year') academic_year: string,
   ) {
-    return this.pasaService.getExamTypes(ay, grade);
+    return this.pasaService.getExamConfigForEntry(grade, section, subject, exam_type, academic_year || '2025-26');
   }
 
-  @Get('sections')
-  getSections(
-    @Query('academic_year') ay: string,
+  @Get('config/section')
+  getAllConfigsForSection(
     @Query('grade') grade: string,
+    @Query('section') section: string,
+    @Query('academic_year') academic_year: string,
   ) {
-    return this.pasaService.getSectionsForGrade(ay, grade);
+    return this.pasaService.getAllConfigsForGradeSection(grade, section, academic_year || '2025-26');
   }
 
-  @Get('subjects')
-  getSubjects(
-    @Query('academic_year') ay: string,
-    @Query('exam_type') et: string,
-    @Query('grade') grade: string,
-  ) {
-    return this.pasaService.getSubjectsForGradeExam(ay, et, grade);
+  @Get('config/:id')
+  getExamConfigById(@Param('id') id: string) {
+    return this.pasaService.getExamConfigById(id);
   }
 
-  // ── MARKS ───────────────────────────────────────────────────
+  @Delete('config/:id')
+  deleteExamConfig(@Param('id') id: string) {
+    return this.pasaService.deleteExamConfig(id);
+  }
+
+  // ── MARKS ENTRY ──────────────────────────────────────────────
 
   @Post('marks')
   saveMarks(@Body() body: any) {
     return this.pasaService.saveMarks(body);
   }
 
+  @Get('marks/entry')
+  getMarksForEntry(
+    @Query('exam_config_id') exam_config_id: string,
+    @Query('grade') grade: string,
+    @Query('section') section: string,
+  ) {
+    return this.pasaService.getMarksForEntry(exam_config_id, grade, section);
+  }
+
   @Get('marks/table')
   getMarksTable(
-    @Query('academic_year') ay: string,
-    @Query('exam_type') et: string,
+    @Query('grade') grade: string,
+    @Query('section') section: string,
+    @Query('exam_type') exam_type: string,
+    @Query('academic_year') academic_year: string,
+    @Query('subject') subject: string,
+  ) {
+    return this.pasaService.getMarksTable(grade, section, exam_type, academic_year || '2025-26', subject);
+  }
+
+  // ── STUDENT REPORT ───────────────────────────────────────────
+
+  @Get('student/:student_id/report')
+  getStudentReport(
+    @Param('student_id') student_id: string,
+    @Query('academic_year') academic_year: string,
+    @Query('exam_type') exam_type: string,
+  ) {
+    return this.pasaService.getStudentExamReport(student_id, academic_year || '2025-26', exam_type);
+  }
+
+  // ── DASHBOARDS ───────────────────────────────────────────────
+
+  @Get('dashboard/school')
+  getSchoolDashboard(
+    @Query('academic_year') academic_year: string,
+    @Query('exam_type') exam_type: string,
+  ) {
+    return this.pasaService.getSchoolDashboard(academic_year || '2025-26', exam_type);
+  }
+
+  @Get('dashboard/grade/:grade')
+  getGradeDashboard(
+    @Param('grade') grade: string,
+    @Query('academic_year') academic_year: string,
+    @Query('exam_type') exam_type: string,
+  ) {
+    return this.pasaService.getGradeDashboard(grade, academic_year || '2025-26', exam_type);
+  }
+
+  @Get('dashboard/section')
+  getSectionDashboard(
+    @Query('grade') grade: string,
+    @Query('section') section: string,
+    @Query('academic_year') academic_year: string,
+    @Query('exam_type') exam_type: string,
+  ) {
+    return this.pasaService.getSectionDashboard(grade, section, academic_year || '2025-26', exam_type);
+  }
+
+  // ── ALERTS ───────────────────────────────────────────────────
+
+  @Get('alerts/decline')
+  getDeclineAlerts(
+    @Query('academic_year') academic_year: string,
     @Query('grade') grade: string,
     @Query('section') section: string,
   ) {
-    return this.pasaService.getMarksTable(ay, et, grade, section);
+    return this.pasaService.getConsecutiveDeclineAlerts(academic_year || '2025-26', grade, section);
   }
 
-  // ── IMPORT ──────────────────────────────────────────────────
+  // ── EXAM TYPES ───────────────────────────────────────────────
 
-  @Post('import')
-  @UseInterceptors(FileInterceptor('file'))
-  importExcel(
-    @UploadedFile() file: Express.Multer.File,
-    @Body('academic_year') ay: string,
-    @Body('exam_type') et: string,
-  ) {
-    return this.pasaService.importFromExcel(file.buffer, ay, et);
-  }
-
-  // ── ANALYSIS ────────────────────────────────────────────────
-
-  @Get('analysis/section')
-  getSectionAnalysis(
-    @Query('academic_year') ay: string,
-    @Query('exam_type') et: string,
-    @Query('grade') grade: string,
-    @Query('section') section: string,
-  ) {
-    return this.pasaService.getSectionAnalysis(ay, et, grade, section);
-  }
-
-  @Get('analysis/grade')
-  getGradeAnalysis(
-    @Query('academic_year') ay: string,
-    @Query('exam_type') et: string,
+  @Get('exam-types')
+  getExamTypes(
+    @Query('academic_year') academic_year: string,
     @Query('grade') grade: string,
   ) {
-    return this.pasaService.getGradeAnalysis(ay, et, grade);
+    return this.pasaService.getExamTypes(academic_year || '2025-26', grade);
   }
 
-  @Get('analysis/school')
-  getSchoolAnalysis(
-    @Query('academic_year') ay: string,
-    @Query('exam_type') et: string,
-  ) {
-    return this.pasaService.getSchoolAnalysis(ay, et);
-  }
-
-  @Get('analysis/longitudinal')
-  getLongitudinal(
-    @Query('academic_year') ay: string,
-    @Query('grade') grade: string,
-    @Query('section') section: string,
-  ) {
-    return this.pasaService.getLongitudinalAnalysis(ay, grade, section);
-  }
-
-  @Get('analysis/student')
-  getStudentAnalysis(
-    @Query('academic_year') ay: string,
-    @Query('student_name') student_name: string,
-  ) {
-    return this.pasaService.getStudentAnalysis(ay, decodeURIComponent(student_name));
-  }
-
-  @Get('search/students')
-  searchStudents(
-    @Query('academic_year') ay: string,
-    @Query('q') q: string,
-  ) {
-    return this.pasaService.searchStudents(ay, q);
-  }
+  // ── PORTFOLIO ────────────────────────────────────────────────
 
   @Get('portfolio/student/:student_id')
   getStudentPortfolio(
@@ -139,8 +149,44 @@ export class PasaController {
     return this.pasaService.getStudentPortfolioPasa(student_id, subjectList);
   }
 
-@Get('alerts/decline')
-  getConsecutiveDecline(@Query('academic_year') ay: string) {
-    return this.pasaService.getConsecutiveDeclineStudents(ay || '2025-26');
+  // ── STUDENT ANALYSIS ─────────────────────────────────────────
+
+  @Get('student/:student_id/analysis')
+  getStudentAnalysis(
+    @Param('student_id') student_id: string,
+    @Query('academic_year') academic_year: string,
+  ) {
+    return this.pasaService.getStudentAnalysis(student_id, academic_year || '2025-26');
+  }
+
+  // ── LONGITUDINAL TREND ───────────────────────────────────────
+
+  @Get('dashboard/trend')
+  getLongitudinalTrend(
+    @Query('grade') grade: string,
+    @Query('section') section: string,
+    @Query('academic_year') academic_year: string,
+  ) {
+    return this.pasaService.getLongitudinalTrend(grade, section, academic_year || '2025-26');
+  }
+
+  // ── ADVANCING / RETRACTING ───────────────────────────────────
+
+  @Get('dashboard/advancing')
+  getAdvancingRetracting(
+    @Query('grade') grade: string,
+    @Query('section') section: string,
+    @Query('academic_year') academic_year: string,
+    @Query('exam1') exam1: string,
+    @Query('exam2') exam2: string,
+  ) {
+    return this.pasaService.getAdvancingRetracting(grade, section, academic_year || '2025-26', exam1, exam2);
+  }
+
+  // ── CLEAR DATA (Admin only) ───────────────────────────────────
+
+  @Delete('clear-all')
+  clearAllData() {
+    return this.pasaService.clearAllPasaData();
   }
 }
