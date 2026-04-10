@@ -231,7 +231,7 @@ export class PasaService {
     // Per subject summary
     const subjectSummary = subjects.map(sub => {
       const subMarks = allMarks.filter(m => m.subject === sub && !m.is_absent && m.percentage !== null);
-      const pcts = subMarks.map(m => +m.percentage);
+      const pcts = subMarks.map(m => +(m.percentage ?? 0));
       const compMap: Record<string, number[]> = {};
       subMarks.forEach(m => {
         (m.competency_scores as any[]).forEach((cs: any) => {
@@ -268,12 +268,12 @@ export class PasaService {
 
     const gradeSummary = grades.map(grade => {
       const gm = allMarks.filter(m => m.grade === grade && !m.is_absent && m.percentage !== null);
-      return { grade, avg: avg(gm.map(m => +m.percentage)), count: gm.length };
+      return { grade, avg: avg(gm.map(m => +(m.percentage ?? 0))), count: gm.length };
     });
 
     const subjectSummary = subjects.map(sub => {
       const sm = allMarks.filter(m => m.subject === sub && !m.is_absent && m.percentage !== null);
-      return { subject: sub, avg: avg(sm.map(m => +m.percentage)), count: sm.length };
+      return { subject: sub, avg: avg(sm.map(m => +(m.percentage ?? 0))), count: sm.length };
     });
 
     // School-wide weakest competencies
@@ -312,12 +312,12 @@ export class PasaService {
 
     const sectionSummary = sections.map(sec => {
       const sm = allMarks.filter(m => m.section === sec && !m.is_absent && m.percentage !== null);
-      return { section: sec, avg: avg(sm.map(m => +m.percentage)), count: sm.length };
+      return { section: sec, avg: avg(sm.map(m => +(m.percentage ?? 0))), count: sm.length };
     });
 
     const subjectSummary = subjects.map(sub => {
       const sm = allMarks.filter(m => m.subject === sub && !m.is_absent && m.percentage !== null);
-      return { subject: sub, avg: avg(sm.map(m => +m.percentage)), count: sm.length };
+      return { subject: sub, avg: avg(sm.map(m => +(m.percentage ?? 0))), count: sm.length };
     });
 
     return { grade, academic_year, exam_type, sectionSummary, subjectSummary };
@@ -459,7 +459,6 @@ export class PasaService {
     await this.configRepo.query('DELETE FROM exam_configs');
     return { success: true, message: 'All PASA data cleared' };
   }
-}
 
   // ── STUDENT ANALYSIS (all exams, all subjects, competency detail) ────
   async getStudentAnalysis(student_id: string, academic_year: string) {
@@ -602,3 +601,4 @@ export class PasaService {
       summary: { advancing: advancing.length, retracting: retracting.length, steady: steady.length },
     };
   }
+}
