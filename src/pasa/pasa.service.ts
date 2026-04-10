@@ -178,11 +178,14 @@ export class PasaService {
   }
 
   async getMarksForEntry(exam_config_id: string, grade: string, section: string) {
-    // Get all students in section
-    const students = await this.studentRepo.find({
-      where: { current_class: grade, section, is_active: true },
-      order: { name: 'ASC' },
-    });
+    // Get all students in section - use case-insensitive query
+    const students = await this.studentRepo
+      .createQueryBuilder('s')
+      .where('LOWER(s.current_class) = LOWER(:grade)', { grade })
+      .andWhere('LOWER(s.section) = LOWER(:section)', { section })
+      .andWhere('s.is_active = true')
+      .orderBy('s.name', 'ASC')
+      .getMany();
 
     // Get existing marks
     const marks = await this.marksRepo.find({
