@@ -546,7 +546,7 @@ export class PasaService {
     const trends = subjects.map(sub => {
       const points = examTypes.map(exam => {
         const examMarks = allMarks.filter(m => m.exam_type === exam && m.subject === sub && !m.is_absent && m.percentage !== null);
-        const avgPct = examMarks.length ? avg(examMarks.map(m => +m.percentage)) : null;
+        const avgPct = examMarks.length ? avg(examMarks.map(m => +(m.percentage ?? 0))) : null;
         return { exam, avg_percentage: avgPct, student_count: examMarks.length };
       });
       return { subject: sub, points };
@@ -555,7 +555,7 @@ export class PasaService {
     // Also overall trend (all subjects combined)
     const overallPoints = examTypes.map(exam => {
       const examMarks = allMarks.filter(m => m.exam_type === exam && !m.is_absent && m.percentage !== null);
-      return { exam, avg_percentage: examMarks.length ? avg(examMarks.map(m => +m.percentage)) : null };
+      return { exam, avg_percentage: examMarks.length ? avg(examMarks.map(m => +(m.percentage ?? 0))) : null };
     });
 
     return { grade, section, academic_year, subjects, examTypes, trends, overallTrend: overallPoints };
@@ -572,11 +572,11 @@ export class PasaService {
 
     marks1.filter(m => !m.is_absent && m.percentage !== null).forEach(m => {
       if (!studentMap[m.student_id]) studentMap[m.student_id] = { name: m.student_name, pct1: null, pct2: null };
-      studentMap[m.student_id].pct1 = +m.percentage;
+      studentMap[m.student_id].pct1 = +(m.percentage ?? 0);
     });
     marks2.filter(m => !m.is_absent && m.percentage !== null).forEach(m => {
       if (!studentMap[m.student_id]) studentMap[m.student_id] = { name: m.student_name, pct1: null, pct2: null };
-      studentMap[m.student_id].pct2 = +m.percentage;
+      studentMap[m.student_id].pct2 = +(m.percentage ?? 0);
     });
 
     const advancing: any[] = [];
