@@ -9,8 +9,15 @@ export class ActivitiesController {
   // ── COMPETENCY MANAGEMENT ─────────────────────────────────────
 
   @Get('competencies')
-  getCompetencies(@Query() query: any) {
-    return this.activitiesService.getCompetencies(query);
+  async getCompetencies(@Query() query: any) {
+    const raw = await this.activitiesService.getCompetencies(query);
+    const list = Array.isArray(raw) ? raw : [];
+    const competencies = list.map((c: any) => ({
+      ...c,
+      code: c.competency_code || c.code || '',
+      name: c.description || c.name || '',
+    }));
+    return { competencies };
   }
 
   @Get('competencies/stats')
