@@ -10,7 +10,20 @@ export class ActivitiesController {
 
   @Get('competencies')
   async getCompetencies(@Query() query: any) {
-    const raw = await this.activitiesService.getCompetencies(query);
+    // Normalize subject to lowercase_underscore to match DB storage format
+    const normalized = { ...query };
+    if (normalized.subject) {
+      normalized.subject = normalized.subject.trim().toLowerCase().replace(/\s+/g, '_');
+    }
+    let raw = await this.activitiesService.getCompetencies(normalized);
+    // Fallback: try without grade if no results
+    if ((!raw || (raw as any[]).length === 0) && normalized.grade) {
+      raw = await this.activitiesService.getCompetencies({ subject: normalized.subject });
+    }
+    // Fallback: try original subject string
+    if (!raw || (raw as any[]).length === 0) {
+      raw = await this.activitiesService.getCompetencies(query);
+    }
     const list = Array.isArray(raw) ? raw : [];
     const competencies = list.map((c: any) => ({
       ...c,
