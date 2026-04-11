@@ -184,6 +184,9 @@ export class TeacherAppraisal {
   @Column({ nullable: true })
   committee_name: string;
 
+  @Column({ type: 'text', nullable: true }) committee_role_comment: string;
+  @Column({ type: 'text', nullable: true }) committee_name_comment: string;
+
   // COMMENTS — optional comment per field
   @Column({ type: 'text', nullable: true }) pa1_comment: string;
   @Column({ type: 'text', nullable: true }) pa2_comment: string;
