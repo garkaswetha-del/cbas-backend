@@ -299,7 +299,7 @@ export class ActivitiesService {
             const avgPct = allPcts.length ? AVG(allPcts) : comp_pct;
             await this.scoreRepo.update(existing_score.id, {
               best_score: +(avgPct / 25).toFixed(2), // convert % to 0-4 scale for backward compat
-              level: comp_level,
+              best_rating: comp_level,
               attempt_count: allPcts.length,
             });
           } else {
@@ -309,7 +309,7 @@ export class ActivitiesService {
               competency_id: comp_id, competency_code: competency.competency_code,
               subject: competency.subject, domain: competency.domain,
               best_score: +(comp_pct / 25).toFixed(2),
-              level: comp_level, attempt_count: 1,
+              best_rating: comp_level, attempt_count: 1,
             }));
           }
         }
@@ -474,7 +474,7 @@ export class ActivitiesService {
       domain: s.domain || 'General',
       subject: s.subject,
       avg: +s.best_score,
-      rating: s.level,
+      rating: (s as any).best_rating,
       level: PCT_TO_LEVEL(+s.best_score),
       assessment_count: s.attempt_count,
     })).sort((a, b) => b.avg - a.avg);
@@ -497,7 +497,7 @@ export class ActivitiesService {
       const row: any = { student_id: st.id, student_name: st.name };
       competencyIds.forEach(cid => {
         const sc = studentScores.find(s => s.competency_id === cid);
-        row[cid] = sc?.level || null;
+        row[cid] = (sc as any)?.best_rating || null;
       });
       const a = studentScores.length ? AVG(studentScores.map(s => +s.best_score)) : 0;
       row.overall_avg = +a.toFixed(2);
@@ -799,7 +799,7 @@ export class ActivitiesService {
       coverage_percent: allCompetencies.length ? +((covered.length / allCompetencies.length) * 100).toFixed(1) : 0,
       covered_competencies: covered.map(c => {
         const s = scores.find(sc => sc.competency_id === c.id);
-        return { ...c, best_score: s?.best_score, level: s?.level, attempt_count: s?.attempt_count };
+        return { ...c, best_score: s?.best_score, level: (s as any)?.best_rating, attempt_count: s?.attempt_count };
       }),
       uncovered_competencies: uncovered,
       bySubject,
@@ -897,7 +897,6 @@ export class ActivitiesService {
           activityAvgs.push({
             name: act.name,
             avg: +((assessment as any).percentage || 0),
-            avg_pct: +((assessment as any).percentage || 0),
             date: act.activity_date || '',
           });
         }
