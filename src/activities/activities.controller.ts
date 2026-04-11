@@ -1,6 +1,7 @@
 import { Controller, Get, Post, Put, Delete, Body, Param, Query, UploadedFile, UseInterceptors } from '@nestjs/common';
 import { FileInterceptor } from '@nestjs/platform-express';
 import { ActivitiesService } from './activities.service';
+import { normalizeSubject } from '../common/utils';
 
 @Controller('activities')
 export class ActivitiesController {

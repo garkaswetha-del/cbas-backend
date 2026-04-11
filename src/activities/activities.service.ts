@@ -10,6 +10,8 @@ import * as XLSX from 'xlsx';
 
 const AVG = (arr: number[]) => arr.length ? +(arr.reduce((a, b) => a + b, 0) / arr.length).toFixed(2) : 0;
 
+import { normalizeSubject } from '../common/utils';
+
 // 8-level grading based on percentage
 const PCT_TO_LEVEL = (pct: number): string => {
   if (pct >= 95) return 'Mastery';
@@ -82,7 +84,7 @@ export class ActivitiesService {
 
   async createCompetency(data: any) {
     const comp = this.competencyRepo.create({
-      subject: data.subject, stage: data.stage, grade: data.grade,
+      subject: normalizeSubject(data.subject), stage: data.stage, grade: data.grade,
       domain: data.domain, competency_code: data.competency_code,
       description: data.description, is_active: true,
     });
@@ -91,7 +93,7 @@ export class ActivitiesService {
 
   async updateCompetency(id: string, data: any) {
     await this.competencyRepo.update(id, {
-      subject: data.subject, stage: data.stage, grade: data.grade,
+      subject: normalizeSubject(data.subject), stage: data.stage, grade: data.grade,
       domain: data.domain, competency_code: data.competency_code,
       description: data.description,
     });
@@ -156,7 +158,7 @@ export class ActivitiesService {
 
     for (const section of sections) {
       const activity = this.activityRepo.create({
-        name: data.name, description: data.description, subject: data.subject,
+        name: data.name, description: data.description, subject: normalizeSubject(data.subject),
         stage: data.stage, grade: data.grade, section,
         academic_year: data.academic_year || '2025-26',
         activity_type: data.activity_type, activity_date: data.activity_date,
@@ -177,7 +179,7 @@ export class ActivitiesService {
     const query = this.activityRepo.createQueryBuilder('a').where('a.is_active = true');
     if (filters.grade) query.andWhere('a.grade = :grade', { grade: filters.grade });
     if (filters.section) query.andWhere('a.section = :section', { section: filters.section });
-    if (filters.subject) query.andWhere('a.subject = :subject', { subject: filters.subject });
+    if (filters.subject) query.andWhere('a.subject = :subject', { subject: normalizeSubject(filters.subject) });
     if (filters.academic_year) query.andWhere('a.academic_year = :ay', { ay: filters.academic_year });
     if (filters.stage) query.andWhere('a.stage = :stage', { stage: filters.stage });
     return query.orderBy('a.activity_date', 'DESC').addOrderBy('a.created_at', 'DESC').getMany();
@@ -189,7 +191,7 @@ export class ActivitiesService {
 
   async updateActivity(id: string, data: any) {
     await this.activityRepo.update(id, {
-      name: data.name, description: data.description, subject: data.subject,
+      name: data.name, description: data.description, subject: normalizeSubject(data.subject),
       stage: data.stage, grade: data.grade, section: data.section,
       activity_type: data.activity_type, activity_date: data.activity_date,
       competency_mappings: data.competency_mappings,
@@ -307,7 +309,7 @@ export class ActivitiesService {
               student_id: entry.student_id, student_name: entry.student_name,
               grade: activity.grade, section: activity.section, academic_year,
               competency_id: comp_id, competency_code: competency.competency_code,
-              subject: competency.subject, domain: competency.domain,
+              subject: normalizeSubject(competency.subject), domain: competency.domain,
               best_score: +(comp_pct / 25).toFixed(2),
               best_rating: comp_level, attempt_count: 1,
             }));
@@ -321,7 +323,7 @@ export class ActivitiesService {
 
 
   async getCombinedMarks(grade: string, section: string, subject: string, academic_year: string) {
-    const subjectNorm = subject.toLowerCase().replace(/\s+/g, '_').replace(/[()]/g, '');
+    const subjectNorm = normalizeSubject(subject);
     const activities = await this.activityRepo.find({
       where: { grade, section, is_active: true, academic_year },
     });
@@ -410,6 +412,7 @@ export class ActivitiesService {
 
 
   async getCompetencyCoverage(grade: string, subject: string, academic_year: string) {
+    subject = normalizeSubject(subject);
     const competencies = await this.competencyRepo.find({ where: { grade, subject, is_active: true } });
     const activities = await this.activityRepo.find({ where: { grade, subject, academic_year, is_active: true } });
     const coveredIds = new Set<string>();
@@ -427,16 +430,18 @@ export class ActivitiesService {
   }
 
   async getCompetencyCoverageDetail(grade: string, subject: string, academic_year: string) {
+    subject = normalizeSubject(subject);
     return this.getCompetencyCoverage(grade, subject, academic_year);
   }
 
   // ── SUBJECTS FOR GRADE ────────────────────────────────────────
 
   async getSubjectsForGrade(grade: string) {
-    const result = await this.competencyRepo
-      .createQueryBuilder('c').select('DISTINCT c.subject', 'subject')
-      .where('c.grade = :grade', { grade }).andWhere('c.is_active = true').getRawMany();
-    return result.map((r: any) => r.subject).sort();
+    // Fetch from activities table — reflects actual subjects used, not just competency registry
+    const result = await this.activityRepo
+      .createQueryBuilder('a').select('DISTINCT a.subject', 'subject')
+      .where('a.grade = :grade', { grade }).andWhere('a.is_active = true').getRawMany();
+    return result.map((r: any) => r.subject).filter(Boolean).sort();
   }
 
   // ── DASHBOARDS ───────────────────────────────────────────────
@@ -605,7 +610,7 @@ export class ActivitiesService {
       competencyMap[s.competency_id].scores.push(+s.best_score);
     });
     const competencies = Object.entries(competencyMap).map(([id, data]) => ({
-      competency_id: id, competency_code: data.code, domain: data.domain, subject: data.subject,
+      competency_id: id, competency_code: data.code, domain: data.domain, subject: normalizeSubject(data.subject),
       avg: AVG(data.scores), level: PCT_TO_LEVEL(AVG(data.scores)),
     })).sort((a, b) => b.avg - a.avg);
 
@@ -680,7 +685,7 @@ export class ActivitiesService {
       competencyMap[s.competency_id].scores.push(+s.best_score);
     });
     const competencies = Object.entries(competencyMap).map(([id, data]) => ({
-      competency_id: id, competency_code: data.code, domain: data.domain, subject: data.subject,
+      competency_id: id, competency_code: data.code, domain: data.domain, subject: normalizeSubject(data.subject),
       avg: AVG(data.scores), level: PCT_TO_LEVEL(AVG(data.scores)), count: data.scores.length,
     })).sort((a, b) => b.avg - a.avg);
 

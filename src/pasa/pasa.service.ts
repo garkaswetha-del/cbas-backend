@@ -1,4 +1,5 @@
 import { Injectable } from '@nestjs/common';
+import { normalizeSubject } from '../common/utils';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { ExamConfig } from './entities/exam-config.entity/exam-config.entity';
@@ -74,17 +75,22 @@ export class PasaService {
   }
 
   async getExamConfigForEntry(grade: string, section: string, subject: string, exam_type: string, academic_year: string) {
-    return this.configRepo.findOne({
-      where: { grade, section, subject, exam_type, academic_year, is_active: true },
-    });
+    return this.configRepo.createQueryBuilder('c')
+      .where('LOWER(c.grade) = LOWER(:grade)', { grade })
+      .andWhere('LOWER(c.section) = LOWER(:section)', { section })
+      .andWhere('c.subject = :subject', { subject: normalizeSubject(subject) })
+      .andWhere('c.exam_type = :exam_type', { exam_type })
+      .andWhere('c.academic_year = :academic_year', { academic_year })
+      .andWhere('c.is_active = true')
+      .getOne();
   }
 
   async getAllConfigsForGradeSection(grade: string, section: string, academic_year: string) {
     const query = this.configRepo.createQueryBuilder('c')
       .where('c.academic_year = :academic_year', { academic_year })
       .andWhere('c.is_active = :active', { active: true });
-    if (grade) query.andWhere('c.grade = :grade', { grade });
-    if (section) query.andWhere('c.section = :section', { section });
+    if (grade) query.andWhere('LOWER(c.grade) = LOWER(:grade)', { grade });
+    if (section) query.andWhere('LOWER(c.section) = LOWER(:section)', { section });
     query.orderBy('c.grade', 'ASC').addOrderBy('c.subject', 'ASC').addOrderBy('c.exam_type', 'ASC');
     const configs = await query.getMany();
     return { configs };
@@ -141,6 +147,7 @@ export class PasaService {
           student_id: entry.student_id,
           exam_config_id: data.exam_config_id,
           academic_year: data.academic_year,
+          is_active: true,
         }
       });
 
