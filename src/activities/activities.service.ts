@@ -8,27 +8,36 @@ import { CompetencyFramework } from '../competencies/entities/competency-framewo
 import { Student } from '../students/entities/student.entity/student.entity';
 import * as XLSX from 'xlsx';
 
-const RATING_TO_SCORE: Record<string, number> = {
-  beginning: 1, approaching: 2, meeting: 3, exceeding: 4,
+const AVG = (arr: number[]) => arr.length ? +(arr.reduce((a, b) => a + b, 0) / arr.length).toFixed(2) : 0;
+
+// 8-level grading based on percentage
+const PCT_TO_LEVEL = (pct: number): string => {
+  if (pct >= 95) return 'Mastery';
+  if (pct >= 86) return 'Advanced';
+  if (pct >= 76) return 'Proficient';
+  if (pct >= 66) return 'Exceeding';
+  if (pct >= 51) return 'Meeting';
+  if (pct >= 36) return 'Approaching';
+  if (pct >= 21) return 'Developing';
+  return 'Beginning';
 };
 
-const SCORE_TO_RATING = (score: number): string => {
-  if (score >= 3.5) return 'Exceeding';
-  if (score >= 2.5) return 'Meeting';
-  if (score >= 1.5) return 'Approaching';
-  if (score > 0) return 'Beginning';
-  return '—';
+// Calculate total marks and percentage from competency_marks and rubrics
+const calcMarksAndPct = (competency_marks: any, rubrics: any[]) => {
+  let total_obtained = 0;
+  let total_max = 0;
+  for (const rubric of (rubrics || [])) {
+    const comp_id = rubric.competency_id;
+    const items = rubric.rubric_items || [];
+    const studentComp = (competency_marks || {})[comp_id] || {};
+    for (let i = 0; i < items.length; i++) {
+      total_max += +(items[i].max_marks || 0);
+      total_obtained += +(studentComp[String(i)] || 0);
+    }
+  }
+  const pct = total_max > 0 ? +((total_obtained / total_max) * 100).toFixed(2) : 0;
+  return { total_obtained, total_max, pct, level: PCT_TO_LEVEL(pct) };
 };
-
-const SCORE_TO_LEVEL = (score: number): string => {
-  if (score >= 3.5) return 'Level 4 – Exceeding';
-  if (score >= 2.5) return 'Level 3 – Meeting';
-  if (score >= 1.5) return 'Level 2 – Approaching';
-  return 'Level 1 – Beginning';
-};
-
-const AVG = (arr: number[]) =>
-  arr.length ? +(arr.reduce((a, b) => a + b, 0) / arr.length).toFixed(2) : 0;
 
 @Injectable()
 export class ActivitiesService {
@@ -137,34 +146,28 @@ export class ActivitiesService {
 
   async createActivity(data: any) {
     const created: Activity[] = [];
-    if (data.apply_to_all_sections && data.grade) {
-      const students = await this.studentRepo
-        .createQueryBuilder('s').select('DISTINCT s.section', 'section')
-        .where('s.current_class = :grade', { grade: data.grade })
-        .andWhere('s.is_active = true').getRawMany();
-      const sections = students.map((s: any) => s.section).filter(Boolean).sort();
-      for (const section of sections) {
-        const activity = this.activityRepo.create({
-          name: data.name, description: data.description, subject: data.subject,
-          stage: data.stage, grade: data.grade, section,
-          academic_year: data.academic_year || '2025-26',
-          activity_type: data.activity_type, activity_date: data.activity_date,
-          competency_mappings: data.competency_mappings || [], created_by: data.created_by,
-        });
-        const saved = await this.activityRepo.save(activity);
-        created.push(saved);
-      }
-      return { created_count: created.length, activities: created };
+    const rubrics = data.rubrics || [];
+    const total_max_marks = rubrics.reduce((sum: number, r: any) =>
+      sum + (r.rubric_items || []).reduce((s: number, item: any) => s + +(item.max_marks || 0), 0), 0);
+
+    const sections: string[] = data.sections && data.sections.length
+      ? data.sections
+      : data.section ? [data.section] : [];
+
+    for (const section of sections) {
+      const activity = this.activityRepo.create({
+        name: data.name, description: data.description, subject: data.subject,
+        stage: data.stage, grade: data.grade, section,
+        academic_year: data.academic_year || '2025-26',
+        activity_type: data.activity_type, activity_date: data.activity_date,
+        competency_mappings: data.competency_mappings || [],
+        rubrics, total_max_marks,
+        created_by: data.created_by,
+      });
+      const saved = await this.activityRepo.save(activity);
+      created.push(saved);
     }
-    const activity = this.activityRepo.create({
-      name: data.name, description: data.description, subject: data.subject,
-      stage: data.stage, grade: data.grade, section: data.section,
-      academic_year: data.academic_year || '2025-26',
-      activity_type: data.activity_type, activity_date: data.activity_date,
-      competency_mappings: data.competency_mappings || [], created_by: data.created_by,
-    });
-    const saved = await this.activityRepo.save(activity);
-    return { created_count: 1, activities: [saved] };
+    return { created_count: created.length, activities: created };
   }
 
   async getActivities(filters: {
@@ -221,6 +224,8 @@ export class ActivitiesService {
       .filter(Boolean);
     return {
       activity,
+      rubrics: (activity.rubrics as any[]) || [],
+      total_max_marks: activity.total_max_marks,
       competencies: activityCompetencies,
       students: students.map(s => {
         const assessment = assessments.find(a => a.student_id === s.id);
@@ -232,58 +237,79 @@ export class ActivitiesService {
   async saveMarks(activity_id: string, academic_year: string, entries: any[]) {
     const activity = await this.activityRepo.findOne({ where: { id: activity_id } });
     if (!activity) throw new Error('Activity not found');
+    const rubrics = (activity.rubrics as any[]) || [];
     const results = { saved: 0, failed: 0 };
+
     for (const entry of entries) {
       try {
+        const competency_marks = entry.competency_marks || {};
+        const { total_obtained, pct, level } = calcMarksAndPct(competency_marks, rubrics);
+
         const existing = await this.assessmentRepo.findOne({
           where: { activity_id, student_id: entry.student_id, academic_year },
         });
-        const ratings = entry.competency_ratings || {};
-        const ratingValues = Object.values(ratings).map((r: any) => RATING_TO_SCORE[r] || 0).filter(v => v > 0);
-        const overallScore = ratingValues.length ? AVG(ratingValues) : 0;
-        const overallRating = SCORE_TO_RATING(overallScore);
+
         if (existing) {
           await this.assessmentRepo.update(existing.id, {
-            competency_ratings: ratings, overall_rating: overallRating, is_complete: true,
-          });
+            competency_marks, total_marks_obtained: total_obtained,
+            percentage: pct, level, is_active: true,
+          } as any);
         } else {
           await this.assessmentRepo.save(this.assessmentRepo.create({
             activity_id, student_id: entry.student_id, student_name: entry.student_name,
             grade: activity.grade, section: activity.section, academic_year,
-            competency_ratings: ratings, overall_rating: overallRating, is_complete: true,
-          }));
+            competency_marks, total_marks_obtained: total_obtained,
+            percentage: pct, level, assessed_by: entry.assessed_by,
+          } as any));
         }
-        // Update StudentCompetencyScore for each competency
-        for (const [competency_id, rating] of Object.entries(ratings)) {
-          const score = RATING_TO_SCORE[rating as string] || 0;
-          if (!score) continue;
-          const competency = await this.competencyRepo.findOne({ where: { id: competency_id } });
+
+        // Update StudentCompetencyScore per competency using % contribution
+        for (const rubric of rubrics) {
+          const comp_id = rubric.competency_id;
+          const items = rubric.rubric_items || [];
+          const studentComp = competency_marks[comp_id] || {};
+          let comp_obtained = 0;
+          let comp_max = 0;
+          for (let i = 0; i < items.length; i++) {
+            comp_max += +(items[i].max_marks || 0);
+            comp_obtained += +(studentComp[String(i)] || 0);
+          }
+          const comp_pct = comp_max > 0 ? +((comp_obtained / comp_max) * 100).toFixed(2) : 0;
+          const comp_level = PCT_TO_LEVEL(comp_pct);
+
+          const competency = await this.competencyRepo.findOne({ where: { id: comp_id } });
           if (!competency) continue;
+
           const existing_score = await this.scoreRepo.findOne({
-            where: { student_id: entry.student_id, competency_id, academic_year },
+            where: { student_id: entry.student_id, competency_id: comp_id, academic_year },
           });
+
           if (existing_score) {
-            // Average across all activities
             const allAssessments = await this.assessmentRepo.find({
               where: { student_id: entry.student_id, academic_year },
             });
-            const allScores: number[] = [];
+            const allPcts: number[] = [];
             for (const a of allAssessments) {
-              const r = (a.competency_ratings as any)?.[competency_id];
-              if (r) allScores.push(RATING_TO_SCORE[r] || 0);
+              const { pct: ap } = calcMarksAndPct(
+                (a as any).competency_marks,
+                (await this.activityRepo.findOne({ where: { id: a.activity_id } }))?.rubrics as any[] || []
+              );
+              if (ap > 0) allPcts.push(ap);
             }
-            const avgScore = allScores.length ? AVG(allScores) : score;
+            const avgPct = allPcts.length ? AVG(allPcts) : comp_pct;
             await this.scoreRepo.update(existing_score.id, {
-              best_score: avgScore, best_rating: SCORE_TO_RATING(avgScore),
-              attempt_count: allScores.length,
+              best_score: +(avgPct / 25).toFixed(2), // convert % to 0-4 scale for backward compat
+              level: comp_level,
+              attempt_count: allPcts.length,
             });
           } else {
             await this.scoreRepo.save(this.scoreRepo.create({
               student_id: entry.student_id, student_name: entry.student_name,
               grade: activity.grade, section: activity.section, academic_year,
-              competency_id, competency_code: competency.competency_code,
+              competency_id: comp_id, competency_code: competency.competency_code,
               subject: competency.subject, domain: competency.domain,
-              best_score: score, best_rating: rating as string, attempt_count: 1,
+              best_score: +(comp_pct / 25).toFixed(2),
+              level: comp_level, attempt_count: 1,
             }));
           }
         }
@@ -293,25 +319,26 @@ export class ActivitiesService {
     return results;
   }
 
+
   async getCombinedMarks(grade: string, section: string, subject: string, academic_year: string) {
-    // Get all activities for this grade/section/subject — newest first (for table display)
+    const subjectNorm = subject.toLowerCase().replace(/\s+/g, '_').replace(/[()]/g, '');
     const activities = await this.activityRepo.find({
-      where: { grade, section, subject, academic_year, is_active: true },
-      order: { activity_date: 'DESC', created_at: 'DESC' },
+      where: { grade, section, is_active: true, academic_year },
     });
+    const filtered = activities.filter(a =>
+      a.subject === subject || a.subject === subjectNorm ||
+      (a.extra_subjects || []).some((s: string) => s === subject || s === subjectNorm)
+    );
 
-    const students = await this.studentRepo.find({
-      where: { current_class: grade, section, is_active: true },
-      order: { name: 'ASC' },
-    });
+    const students = await this.studentRepo
+      .createQueryBuilder('s')
+      .where('LOWER(s.current_class) = LOWER(:grade)', { grade })
+      .andWhere('LOWER(s.section) = LOWER(:section)', { section })
+      .andWhere('s.is_active = true')
+      .orderBy('s.name', 'ASC')
+      .getMany();
 
-    const competencies = await this.competencyRepo.find({
-      where: { grade, subject, is_active: true },
-      order: { domain: 'ASC', competency_code: 'ASC' },
-    });
-
-    // Get all assessments for these activities
-    const activityIds = activities.map(a => a.id);
+    const activityIds = filtered.map(a => a.id);
     const assessments = activityIds.length
       ? await this.assessmentRepo
           .createQueryBuilder('aa')
@@ -320,65 +347,67 @@ export class ActivitiesService {
           .getMany()
       : [];
 
-    // Build student rows with per-activity ratings and competency averages
+    // Build student rows
     const studentRows = students.map(student => {
       const activityData: Record<string, any> = {};
-      activities.forEach(act => {
+      filtered.forEach(act => {
         const assessment = assessments.find(a => a.activity_id === act.id && a.student_id === student.id);
-        activityData[act.id] = assessment?.competency_ratings || null;
+        activityData[act.id] = {
+          competency_marks: (assessment as any)?.competency_marks || null,
+          percentage: (assessment as any)?.percentage || null,
+          level: (assessment as any)?.level || null,
+          total_marks_obtained: (assessment as any)?.total_marks_obtained || null,
+        };
       });
 
-      // Compute average score per competency across all activities
-      const competencyAvgs: Record<string, { avg: number; rating: string; count: number }> = {};
-      competencies.forEach(comp => {
-        const scores: number[] = [];
-        activities.forEach(act => {
-          const ratings = activityData[act.id] as Record<string, string> | null;
-          const r = ratings?.[comp.id];
-          if (r && RATING_TO_SCORE[r]) scores.push(RATING_TO_SCORE[r]);
+      // Per-competency percentage averages across activities
+      const competencyPcts: Record<string, { avg_pct: number; level: string; count: number }> = {};
+      const allCompIds = new Set<string>();
+      filtered.forEach(act => { (act.rubrics as any[] || []).forEach((r: any) => allCompIds.add(r.competency_id)); });
+
+      allCompIds.forEach(comp_id => {
+        const pcts: number[] = [];
+        filtered.forEach(act => {
+          const rubrics = (act.rubrics as any[]) || [];
+          const compRubric = rubrics.find((r: any) => r.competency_id === comp_id);
+          if (!compRubric) return;
+          const cm = activityData[act.id]?.competency_marks;
+          if (!cm) return;
+          const studentComp = cm[comp_id] || {};
+          let obtained = 0; let max = 0;
+          (compRubric.rubric_items || []).forEach((item: any, i: number) => {
+            max += +(item.max_marks || 0);
+            obtained += +(studentComp[String(i)] || 0);
+          });
+          if (max > 0) pcts.push(+(obtained / max * 100).toFixed(2));
         });
-        if (scores.length) {
-          const avg = AVG(scores);
-          competencyAvgs[comp.id] = { avg, rating: SCORE_TO_RATING(avg), count: scores.length };
+        if (pcts.length) {
+          const avg_pct = AVG(pcts);
+          competencyPcts[comp_id] = { avg_pct, level: PCT_TO_LEVEL(avg_pct), count: pcts.length };
         }
       });
 
-      // Domain averages
-      const domainMap: Record<string, number[]> = {};
-      competencies.forEach(comp => {
-        const data = competencyAvgs[comp.id];
-        if (!data) return;
-        const d = comp.domain || 'General';
-        if (!domainMap[d]) domainMap[d] = [];
-        domainMap[d].push(data.avg);
-      });
-      const domainAvgs: Record<string, number> = {};
-      Object.entries(domainMap).forEach(([d, vals]) => { domainAvgs[d] = AVG(vals); });
-
-      // Overall average
-      const allVals = Object.values(competencyAvgs).map(c => c.avg);
-      const overallAvg = allVals.length ? AVG(allVals) : 0;
+      // Overall average pct
+      const allPcts = filtered
+        .map(act => activityData[act.id]?.percentage)
+        .filter((p: any) => p !== null && p !== undefined)
+        .map((p: any) => +p);
+      const overall_pct = allPcts.length ? AVG(allPcts) : 0;
 
       return {
-        student_id: student.id,
-        student_name: student.name,
-        roll_number: student.admission_no,
-        activity_data: activityData,
-        competency_avgs: competencyAvgs,
-        domain_avgs: domainAvgs,
-        overall_avg: overallAvg,
-        overall_rating: SCORE_TO_RATING(overallAvg),
-        overall_level: SCORE_TO_LEVEL(overallAvg),
+        student_id: student.id, student_name: student.name,
+        activity_data: activityData, competencyPcts,
+        overall_pct, level: PCT_TO_LEVEL(overall_pct),
       };
     });
 
     return {
-      activities, // newest first
-      competencies,
+      activities: filtered,
       students: studentRows,
-      domains: [...new Set(competencies.map(c => c.domain || 'General'))].sort(),
+      grade, section, subject, academic_year,
     };
   }
+
 
   async getCompetencyCoverage(grade: string, subject: string, academic_year: string) {
     const competencies = await this.competencyRepo.find({ where: { grade, subject, is_active: true } });
@@ -423,7 +452,7 @@ export class ActivitiesService {
     });
     const subjectSummary = Object.entries(bySubject).map(([subject, subScores]) => {
       const avg = AVG(subScores.map(s => +s.best_score));
-      return { subject, avg, level: SCORE_TO_LEVEL(avg), competency_count: subScores.length };
+      return { subject, avg, level: PCT_TO_LEVEL(avg), competency_count: subScores.length };
     });
 
     const byDomain: Record<string, any[]> = {};
@@ -435,7 +464,7 @@ export class ActivitiesService {
     const domainSummary = Object.entries(byDomain).map(([key, domScores]) => {
       const [subject, domain] = key.split('__');
       const avg = AVG(domScores.map(s => +s.best_score));
-      return { subject, domain, avg, level: SCORE_TO_LEVEL(avg), count: domScores.length };
+      return { subject, domain, avg, level: PCT_TO_LEVEL(avg), count: domScores.length };
     });
 
     // Individual competency scores
@@ -445,8 +474,8 @@ export class ActivitiesService {
       domain: s.domain || 'General',
       subject: s.subject,
       avg: +s.best_score,
-      rating: s.best_rating,
-      level: SCORE_TO_LEVEL(+s.best_score),
+      rating: s.level,
+      level: PCT_TO_LEVEL(+s.best_score),
       assessment_count: s.attempt_count,
     })).sort((a, b) => b.avg - a.avg);
 
@@ -468,11 +497,11 @@ export class ActivitiesService {
       const row: any = { student_id: st.id, student_name: st.name };
       competencyIds.forEach(cid => {
         const sc = studentScores.find(s => s.competency_id === cid);
-        row[cid] = sc?.best_rating || null;
+        row[cid] = sc?.level || null;
       });
       const a = studentScores.length ? AVG(studentScores.map(s => +s.best_score)) : 0;
       row.overall_avg = +a.toFixed(2);
-      row.level = SCORE_TO_LEVEL(a);
+      row.level = PCT_TO_LEVEL(a);
       return row;
     });
 
@@ -484,7 +513,7 @@ export class ActivitiesService {
       return {
         competency_id: cid, competency_code: sample?.competency_code,
         domain: sample?.domain || 'General', subject: sample?.subject,
-        avg: +a.toFixed(2), level: SCORE_TO_LEVEL(a),
+        avg: +a.toFixed(2), level: PCT_TO_LEVEL(a),
       };
     });
 
@@ -577,7 +606,7 @@ export class ActivitiesService {
     });
     const competencies = Object.entries(competencyMap).map(([id, data]) => ({
       competency_id: id, competency_code: data.code, domain: data.domain, subject: data.subject,
-      avg: AVG(data.scores), level: SCORE_TO_LEVEL(AVG(data.scores)),
+      avg: AVG(data.scores), level: PCT_TO_LEVEL(AVG(data.scores)),
     })).sort((a, b) => b.avg - a.avg);
 
     // Student averages for ranking
@@ -652,7 +681,7 @@ export class ActivitiesService {
     });
     const competencies = Object.entries(competencyMap).map(([id, data]) => ({
       competency_id: id, competency_code: data.code, domain: data.domain, subject: data.subject,
-      avg: AVG(data.scores), level: SCORE_TO_LEVEL(AVG(data.scores)), count: data.scores.length,
+      avg: AVG(data.scores), level: PCT_TO_LEVEL(AVG(data.scores)), count: data.scores.length,
     })).sort((a, b) => b.avg - a.avg);
 
     // Level distribution
@@ -726,7 +755,7 @@ export class ActivitiesService {
         const nb = parseInt(b[0].replace(/\D/g, '')) || 0;
         return na - nb;
       })
-      .map(([grade, scores]) => ({ grade, avg: AVG(scores), level: SCORE_TO_LEVEL(AVG(scores)) }));
+      .map(([grade, scores]) => ({ grade, avg: AVG(scores), level: PCT_TO_LEVEL(AVG(scores)) }));
 
     return { student, timeline, gradeTimeline, subjects, academicYears };
   }
@@ -770,7 +799,7 @@ export class ActivitiesService {
       coverage_percent: allCompetencies.length ? +((covered.length / allCompetencies.length) * 100).toFixed(1) : 0,
       covered_competencies: covered.map(c => {
         const s = scores.find(sc => sc.competency_id === c.id);
-        return { ...c, best_score: s?.best_score, best_rating: s?.best_rating, attempt_count: s?.attempt_count };
+        return { ...c, best_score: s?.best_score, level: s?.level, attempt_count: s?.attempt_count };
       }),
       uncovered_competencies: uncovered,
       bySubject,
@@ -864,13 +893,11 @@ export class ActivitiesService {
 
         for (const act of groupActivities) {
           const assessment = groupAssessments.find(a => a.activity_id === act.id && a.student_id === studentId);
-          if (!assessment?.competency_ratings) continue;
-          const ratings = assessment.competency_ratings as Record<string, string>;
-          const vals = Object.values(ratings).map(r => RATING_TO_SCORE[r] || 0).filter(v => v > 0);
-          if (!vals.length) continue;
+          if (!(assessment as any)?.percentage) continue;
           activityAvgs.push({
             name: act.name,
-            avg: AVG(vals),
+            avg: +((assessment as any).percentage || 0),
+            avg_pct: +((assessment as any).percentage || 0),
             date: act.activity_date || '',
           });
         }

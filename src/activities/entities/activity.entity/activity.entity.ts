@@ -14,8 +14,6 @@ export class Activity {
   @Column()
   subject: string;
 
-  // Multi-subject: cross-curricular areas this activity also maps to
-  // e.g. ["Arts", "Interdisciplinary"] when a Social drama also covers Arts
   @Column({ type: 'simple-array', nullable: true })
   extra_subjects: string[];
 
@@ -28,7 +26,7 @@ export class Activity {
   @Column()
   academic_year: string;
 
-  @Column({ default: 'observation' })
+  @Column({ default: 'Individual' })
   activity_type: string;
 
   @Column({ nullable: true })
@@ -37,8 +35,17 @@ export class Activity {
   @Column({ nullable: true })
   section: string;
 
+  // competency_mappings: array of competency IDs
   @Column({ type: 'jsonb', nullable: true })
   competency_mappings: string[];
+
+  // rubrics: [{competency_id, competency_code, competency_name, rubric_items: [{name, max_marks}]}]
+  @Column({ type: 'jsonb', nullable: true, default: '[]' })
+  rubrics: object[];
+
+  // total max marks across all competency rubric items
+  @Column({ type: 'decimal', precision: 8, scale: 2, default: 0 })
+  total_max_marks: number;
 
   @Column({ nullable: true })
   created_by: string;

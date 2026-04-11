@@ -23,18 +23,26 @@ export class ActivityAssessment {
   @Column()
   academic_year: string;
 
-  // { competency_id: 'beginning' | 'approaching' | 'meeting' | 'exceeding' }
-  @Column({ type: 'jsonb', nullable: true })
-  competency_ratings: object;
+  // { competency_id: { rubric_index: marks_obtained } }
+  // e.g. { "comp-uuid": { "0": 4, "1": 3, "2": 5 } }
+  @Column({ type: 'jsonb', nullable: true, default: '{}' })
+  competency_marks: object;
 
+  @Column({ type: 'decimal', precision: 8, scale: 2, nullable: true })
+  total_marks_obtained: number;
+
+  @Column({ type: 'decimal', precision: 6, scale: 2, nullable: true })
+  percentage: number;
+
+  // One of 8 levels based on percentage
   @Column({ nullable: true })
-  overall_rating: string;
+  level: string;
 
   @Column({ nullable: true })
   assessed_by: string;
 
-  @Column({ default: false })
-  is_complete: boolean;
+  @Column({ default: true })
+  is_active: boolean;
 
   @CreateDateColumn()
   created_at: Date;
