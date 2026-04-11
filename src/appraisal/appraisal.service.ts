@@ -21,7 +21,13 @@ export class AppraisalService {
     const appraisals = await this.appraisalRepo.find({ where: { academic_year } });
     return teachers.map((teacher) => {
       const appraisal = appraisals.find((a) => a.teacher_id === teacher.id);
-      return { teacher_id: teacher.id, teacher_name: teacher.name, appraisal: appraisal || null };
+      return {
+        teacher_id: teacher.id,
+        teacher_name: teacher.name,
+        qualification: teacher.qualification || null,
+        salary: (teacher as any).salary || null,
+        appraisal: appraisal || null,
+      };
     });
   }
 
