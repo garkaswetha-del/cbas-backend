@@ -77,6 +77,32 @@ export class ActivitiesController {
     return this.activitiesService.getActivities(query);
   }
 
+  @Get('report/subject-wise/:grade/:section')
+  getSubjectWiseReport(
+    @Param('grade') grade: string,
+    @Param('section') section: string,
+    @Query('academic_year') academic_year: string,
+  ) {
+    return this.activitiesService.getSubjectWiseReport(
+      decodeURIComponent(grade),
+      decodeURIComponent(section),
+      academic_year || '2025-26',
+    );
+  }
+
+  @Get('section')
+  getActivitiesForSection(
+    @Query('grade') grade: string,
+    @Query('section') section: string,
+    @Query('academic_year') academic_year: string,
+  ) {
+    return this.activitiesService.getActivities({
+      grade: grade ? decodeURIComponent(grade) : undefined,
+      section: section ? decodeURIComponent(section) : undefined,
+      academic_year: academic_year || '2025-26',
+    });
+  }
+
   @Get('subjects-for-grade/:grade')
   getSubjectsForGrade(@Param('grade') grade: string) {
     return this.activitiesService.getSubjectsForGrade(grade);

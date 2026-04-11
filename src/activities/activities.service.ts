@@ -413,8 +413,13 @@ export class ActivitiesService {
 
   async getCompetencyCoverage(grade: string, subject: string, academic_year: string) {
     subject = normalizeSubject(subject);
-    const competencies = await this.competencyRepo.find({ where: { grade, subject, is_active: true } });
-    const activities = await this.activityRepo.find({ where: { grade, subject, academic_year, is_active: true } });
+    const competencies = await this.competencyRepo
+      .createQueryBuilder('c').where('LOWER(c.grade) = LOWER(:grade)', { grade })
+      .andWhere('c.subject = :subject', { subject }).andWhere('c.is_active = true').getMany();
+    const activities = await this.activityRepo
+      .createQueryBuilder('a').where('LOWER(a.grade) = LOWER(:grade)', { grade })
+      .andWhere('a.subject = :subject', { subject }).andWhere('a.academic_year = :ay', { ay: academic_year })
+      .andWhere('a.is_active = true').getMany();
     const coveredIds = new Set<string>();
     activities.forEach(a => { (a.competency_mappings as string[]).forEach(id => coveredIds.add(id)); });
     const covered = competencies.filter(c => coveredIds.has(c.id));
@@ -435,6 +440,60 @@ export class ActivitiesService {
   }
 
   // ── SUBJECTS FOR GRADE ────────────────────────────────────────
+
+  async getSubjectWiseReport(grade: string, section: string, academic_year: string) {
+    // All activities for this grade+section
+    const activities = await this.activityRepo
+      .createQueryBuilder('a').where('LOWER(a.grade) = LOWER(:grade)', { grade })
+      .andWhere('LOWER(a.section) = LOWER(:section)', { section })
+      .andWhere('a.academic_year = :ay', { ay: academic_year })
+      .andWhere('a.is_active = true')
+      .orderBy('a.subject', 'ASC').addOrderBy('a.activity_date', 'DESC').getMany();
+
+    // All competencies for this grade
+    const allComps = await this.competencyRepo
+      .createQueryBuilder('c').where('LOWER(c.grade) = LOWER(:grade)', { grade })
+      .andWhere('c.is_active = true').getMany();
+
+    // Group by subject
+    const bySubject: Record<string, any> = {};
+    activities.forEach(a => {
+      const sub = a.subject || 'General';
+      if (!bySubject[sub]) {
+        const subComps = allComps.filter(c => c.subject === sub);
+        bySubject[sub] = {
+          subject: sub,
+          activities: [],
+          total_competencies: subComps.length,
+          covered_competency_ids: new Set<string>(),
+        };
+      }
+      const rubrics = (a.rubrics as any[]) || [];
+      rubrics.forEach((r: any) => bySubject[sub].covered_competency_ids.add(r.competency_id));
+      bySubject[sub].activities.push({
+        id: a.id, name: a.name, activity_type: a.activity_type,
+        activity_date: a.activity_date, total_max_marks: a.total_max_marks,
+        rubrics: rubrics.map((r: any) => ({
+          competency_id: r.competency_id,
+          competency_code: r.competency_code,
+          competency_name: r.competency_name,
+          rubric_items: r.rubric_items,
+          max_marks: (r.rubric_items || []).reduce((s: number, i: any) => s + +(i.max_marks || 0), 0),
+        })),
+      });
+    });
+
+    const report = Object.values(bySubject).map((sub: any) => ({
+      subject: sub.subject,
+      total_competencies: sub.total_competencies,
+      covered_competencies: sub.covered_competency_ids.size,
+      coverage_percent: sub.total_competencies
+        ? +((sub.covered_competency_ids.size / sub.total_competencies) * 100).toFixed(1) : 0,
+      activities: sub.activities,
+    }));
+
+    return { grade, section, academic_year, report };
+  }
 
   async getSubjectsForGrade(grade: string) {
     // Fetch from activities table — reflects actual subjects used, not just competency registry
@@ -566,8 +625,12 @@ export class ActivitiesService {
   }
 
   async getGradeDashboard(grade: string, academic_year: string) {
-    const scores = await this.scoreRepo.find({ where: { grade, academic_year } });
-    const students = await this.studentRepo.find({ where: { current_class: grade, is_active: true } });
+    const scores = await this.scoreRepo
+      .createQueryBuilder('s').where('LOWER(s.grade) = LOWER(:grade)', { grade })
+      .andWhere('s.academic_year = :ay', { ay: academic_year }).getMany();
+    const students = await this.studentRepo
+      .createQueryBuilder('s').where('LOWER(s.current_class) = LOWER(:grade)', { grade })
+      .andWhere('s.is_active = true').getMany();
 
     // Section averages
     const sectionMap: Record<string, any[]> = {};
@@ -813,9 +876,15 @@ export class ActivitiesService {
 
   // ── SECTION COVERAGE ─────────────────────────────────────────
   async getSectionCoverage(grade: string, section: string, academic_year: string) {
-    const students = await this.studentRepo.find({ where: { current_class: grade, section, is_active: true } });
-    const allCompetencies = await this.competencyRepo.find({ where: { grade, is_active: true } });
-    const activities = await this.activityRepo.find({ where: { grade, section, academic_year, is_active: true } });
+    const students = await this.studentRepo
+      .createQueryBuilder('s').where('LOWER(s.current_class) = LOWER(:grade)', { grade })
+      .andWhere('LOWER(s.section) = LOWER(:section)', { section }).andWhere('s.is_active = true').getMany();
+    const allCompetencies = await this.competencyRepo
+      .createQueryBuilder('c').where('LOWER(c.grade) = LOWER(:grade)', { grade }).andWhere('c.is_active = true').getMany();
+    const activities = await this.activityRepo
+      .createQueryBuilder('a').where('LOWER(a.grade) = LOWER(:grade)', { grade })
+      .andWhere('LOWER(a.section) = LOWER(:section)', { section })
+      .andWhere('a.academic_year = :academic_year', { academic_year }).andWhere('a.is_active = true').getMany();
 
     // Which competencies have been assessed at least once via an activity
     const activityCoveredIds = new Set<string>();
