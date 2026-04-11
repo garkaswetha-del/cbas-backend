@@ -177,6 +177,34 @@ export class TeacherAppraisal {
   @Column({ nullable: true })
   shared_at: string;
 
+  // COMMITTEE
+  @Column({ nullable: true })
+  committee_role: string;
+
+  @Column({ nullable: true })
+  committee_name: string;
+
+  // COMMENTS — optional comment per field
+  @Column({ type: 'text', nullable: true }) pa1_comment: string;
+  @Column({ type: 'text', nullable: true }) pa2_comment: string;
+  @Column({ type: 'text', nullable: true }) pa3_comment: string;
+  @Column({ type: 'text', nullable: true }) pa4_comment: string;
+  @Column({ type: 'text', nullable: true }) sa1_comment: string;
+  @Column({ type: 'text', nullable: true }) sa2_comment: string;
+  @Column({ type: 'text', nullable: true }) workshops_comment: string;
+  @Column({ type: 'text', nullable: true }) training_sessions_comment: string;
+  @Column({ type: 'text', nullable: true }) books_read_comment: string;
+  @Column({ type: 'text', nullable: true }) articles_published_comment: string;
+  @Column({ type: 'text', nullable: true }) teaching_strategies_comment: string;
+  @Column({ type: 'text', nullable: true }) team_work_comment: string;
+  @Column({ type: 'text', nullable: true }) attitude_towards_students_comment: string;
+  @Column({ type: 'text', nullable: true }) commitment_to_values_comment: string;
+  @Column({ type: 'text', nullable: true }) adaptability_comment: string;
+  @Column({ type: 'text', nullable: true }) dressing_comment: string;
+  @Column({ type: 'text', nullable: true }) parents_feedback_band_comment: string;
+  @Column({ type: 'text', nullable: true }) obs_0_comment: string;
+  @Column({ type: 'text', nullable: true }) english_comm_band_comment: string;
+
   @CreateDateColumn()
   created_at: Date;
 

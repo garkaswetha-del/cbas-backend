@@ -47,11 +47,17 @@ export class AppraisalService {
       responsibilities_score, overall_score, overall_percentage,
     };
 
+    // Get valid column names from entity metadata to avoid unknown field errors
+    const meta = this.appraisalRepo.metadata;
+    const validCols = new Set(meta.columns.map(c => c.propertyName));
+    const safeData: any = {};
+    Object.entries(appraisalData).forEach(([k, v]) => { if (validCols.has(k)) safeData[k] = v; });
+
     if (existing) {
-      await this.appraisalRepo.update(existing.id, appraisalData);
+      await this.appraisalRepo.update(existing.id, safeData);
       return this.appraisalRepo.findOne({ where: { id: existing.id } });
     } else {
-      const newAppraisal = this.appraisalRepo.create(appraisalData);
+      const newAppraisal = this.appraisalRepo.create(safeData);
       return this.appraisalRepo.save(newAppraisal);
     }
   }
@@ -84,11 +90,17 @@ export class AppraisalService {
 
   private calculateSkillsScore(data: Partial<TeacherAppraisal>): number {
     const map: Record<string, number> = {
-      'ATTENDED 41 TO 50:-  2 MARKS': 2, 'ATTENDED 21 TO 30:- 1.5 MARKS': 1.5,
-      'ATTENDED 10 TO 20:- 1 MARKS': 1,
-      'CONDUCTED 2 TRAINING:- 2 MARKS': 2, 'CONDUCTED 1 TRAINING:- 1 MARKS': 1,
-      '8 & ABOVE:- 2 MARKS': 2, '6 - 8:- 1.5 MARKS': 1.5, '4 - 6:- 1 MARKS': 1,
-      '2 & ABOVE:- 2 MARKS': 2, '1 - 2:- 1 MARKS': 1,
+      // Workshops
+      'ATTENDED 41 TO 50:- 2 MARKS': 2, 'ATTENDED 21 TO 40:- 1.5 MARKS': 1.5,
+      'ATTENDED 10 TO 20:- 1 MARK': 1,
+      // Training
+      'CONDUCTED 2 TRAINING:- 2 MARKS': 2, 'CONDUCTED 1 TRAINING:- 1 MARK': 1,
+      // Books
+      '8 & ABOVE:- 2 MARKS': 2, '6 TO 8:- 1.5 MARKS': 1.5, '4 TO 6:- 1 MARK': 1,
+      // Articles & Strategies
+      '2 & ABOVE:- 2 MARKS': 2, '1 TO 2:- 1 MARK': 1,
+      // Not applicable = 0 (default)
+      'NOT APPLICABLE :- 0 MARKS': 0,
     };
     const obtained =
       (map[data.workshops ?? ''] ?? 0) +
@@ -101,13 +113,13 @@ export class AppraisalService {
 
   private calculateBehaviourScore(data: Partial<TeacherAppraisal>): number {
     const map: Record<string, number> = {
-      'HIGHLY CO-OPERATIVE: 2 MARKS': 2, 'GENERALLY CO-OPERATIVE: 1 MARKS': 1, 'SOMETIMES CO-OPERATIVE: 0 MARKS': 0,
-      'RESPECTFULL & FAIR TOWARDS STUDENTS:- 2 MARKS': 2, 'SOMETIMES RESPECTFULL & FAIR:- 1 MARKS': 1, 'UNFAIR:- 0 MARKS': 0,
-      'FULLY COMMITTED & ACTIVITY PROMOTES SCHOOL VALUES:- 2 MARKS': 2,
-      'GENERALLY COMMITTED & SUPPORT TO SCHOOL VALUES:- 1 MARKS': 1, 'RARELY FOLLOWS & COMMITTED:- 0 MARKS': 0,
-      'HIGHLY ADAPTABLE & FLEXIBLE:- 2 MARKS': 2, 'GENERALLY ADAPTABLE & FLEXIBLE:- 1 MARKS': 1, 'STRUGGLES WITH ADAPTABILITY:- 0 MARKS': 0,
-      'ALWAYS CLEAN, NEAT & WELL PRESENTED PROFESIONALLY:- 2 MARKS': 2,
-      'GENERALLY CLEAN & NEAT WITH OCCASIONAL LAPSES:- 1 MARKS': 1, 'FREQUENTLY UNTIDY:- 0 MARKS': 0,
+      'HIGHLY CO-OPERATIVE: 2 MARKS': 2, 'GENERALLY CO-OPERATIVE: 1 MARK': 1, 'SOMETIMES CO-OPERATIVE: 0 MARKS': 0,
+      'RESPECTFUL & FAIR TOWARDS STUDENTS:- 2 MARKS': 2, 'SOMETIMES RESPECTFUL & FAIR:- 1 MARK': 1, 'UNFAIR:- 0 MARKS': 0,
+      'FULLY COMMITTED & ACTIVELY PROMOTES SCHOOL VALUES:- 2 MARKS': 2,
+      'GENERALLY COMMITTED & SUPPORTS SCHOOL VALUES:- 1 MARK': 1, 'RARELY FOLLOWS & COMMITTED:- 0 MARKS': 0,
+      'HIGHLY ADAPTABLE & FLEXIBLE:- 2 MARKS': 2, 'GENERALLY ADAPTABLE & FLEXIBLE:- 1 MARK': 1, 'STRUGGLES WITH ADAPTABILITY:- 0 MARKS': 0,
+      'ALWAYS CLEAN, NEAT & WELL PRESENTED PROFESSIONALLY:- 2 MARKS': 2,
+      'GENERALLY CLEAN & NEAT WITH OCCASIONAL LAPSES:- 1 MARK': 1, 'FREQUENTLY UNTIDY:- 0 MARKS': 0,
     };
     const obtained =
       (map[data.team_work ?? ''] ?? 0) +
@@ -129,12 +141,13 @@ export class AppraisalService {
     const obs = data.classroom_observations as any[];
     if (!obs || !obs.length) return 0;
     const map: Record<string, number> = {
-      'BELOW 10 :-    3 MARKS': 3, '11 TO 15 :-       5 MARKS': 5,
-      '16 TO 19 :-         8 MARKS': 8, '20 & ABOVE :-  10 MARKS': 10,
+      'BELOW 10:- 3 MARKS': 3, '11 TO 15:- 5 MARKS': 5,
+      '16 TO 19:- 8 MARKS': 8, '20 & ABOVE:- 10 MARKS': 10,
     };
-    const total = obs.reduce((sum, o) => sum + (map[o.band] || 0), 0);
-    const maxMarks = obs.length * 10;
-    return maxMarks > 0 ? (total / maxMarks) * 0.1 : 0;
+    // Single observation now
+    const band = Array.isArray(obs) ? obs[0]?.band : null;
+    const score = map[band ?? ''] ?? 0;
+    return (score / 10) * 0.1;
   }
 
   private calculateEnglishCommScore(data: Partial<TeacherAppraisal>): number {
