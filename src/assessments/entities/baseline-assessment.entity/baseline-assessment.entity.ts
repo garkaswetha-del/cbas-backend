@@ -56,51 +56,51 @@ export class BaselineAssessment {
   @Column({ type: 'enum', enum: AssessmentRound })
   round: AssessmentRound;
 
-  @Column({ type: 'enum', enum: AssessmentSubject })
+  @Column({ type: 'enum', enum: AssessmentSubject, nullable: true })
   subject: AssessmentSubject;
 
-  @Column({ type: 'enum', enum: AssessmentStage })
+  @Column({ type: 'enum', enum: AssessmentStage, nullable: true })
   stage: AssessmentStage;
 
   @Column({ nullable: true })
   assessment_date: string;
 
-  @Column({ type: 'decimal', precision: 5, scale: 2, nullable: true })
-  listening_score: number;
+  // Raw marks as entered: { "Listening": 5, "Speaking": 11, ... }
+  @Column({ type: 'jsonb', nullable: true })
+  literacy_scores: Record<string, number>;
 
-  @Column({ type: 'decimal', precision: 5, scale: 2, nullable: true })
-  speaking_score: number;
+  // Raw marks: { "Operations": 12.5, "Data Handling": 8, ... }
+  @Column({ type: 'jsonb', nullable: true })
+  numeracy_scores: Record<string, number>;
 
-  @Column({ type: 'decimal', precision: 5, scale: 2, nullable: true })
-  reading_score: number;
+  // Max marks for this round: { "Listening": 7, "Operations": 25, ... }
+  @Column({ type: 'jsonb', nullable: true })
+  max_marks: Record<string, number>;
 
-  @Column({ type: 'decimal', precision: 5, scale: 2, nullable: true })
-  writing_score: number;
+  // Calculated %: { "Listening": 71.43, "Speaking": 73.33, ... }
+  @Column({ type: 'jsonb', nullable: true })
+  literacy_pct: Record<string, number>;
 
-  @Column({ type: 'decimal', precision: 5, scale: 2, nullable: true })
-  operations_score: number;
+  // Calculated %: { "Operations": 50.0, "Base 10": 80.0, ... }
+  @Column({ type: 'jsonb', nullable: true })
+  numeracy_pct: Record<string, number>;
 
-  @Column({ type: 'decimal', precision: 5, scale: 2, nullable: true })
-  base10_score: number;
-
-  @Column({ type: 'decimal', precision: 5, scale: 2, nullable: true })
-  measurement_score: number;
-
-  @Column({ type: 'decimal', precision: 5, scale: 2, nullable: true })
-  geometry_score: number;
-
+  // avg of literacy domain percentages
   @Column({ type: 'decimal', precision: 5, scale: 2, nullable: true })
   literacy_total: number;
 
+  // avg of numeracy domain percentages
   @Column({ type: 'decimal', precision: 5, scale: 2, nullable: true })
   numeracy_total: number;
 
+  // avg of literacy_total + numeracy_total
   @Column({ type: 'decimal', precision: 5, scale: 2, nullable: true })
   overall_score: number;
 
   @Column({ nullable: true })
   level: string;
 
+  // { literacy: ["Listening", "Writing"], numeracy: ["Operations"] }
   @Column({ type: 'jsonb', nullable: true })
   gaps: object;
 
