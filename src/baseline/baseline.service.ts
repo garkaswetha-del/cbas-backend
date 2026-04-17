@@ -331,9 +331,33 @@ export class BaselineService {
 
     const level = overall_score !== undefined ? this.getLevel(overall_score) : undefined;
     const gaps = this.getGaps(literacy_pct, numeracy_pct);
-    const { promoted, promoted_to_stage } = overall_score !== undefined
-      ? this.getPromotion(overall_score, data.stage || 'foundation')
-      : { promoted: false, promoted_to_stage: null };
+
+    // Subject-wise promotion — each subject promoted independently at 80%
+    const litTotal = literacy_total !== undefined ? +literacy_total : null;
+    const numTotal = numeracy_total !== undefined ? +numeracy_total : null;
+    const lit_stage = data.lit_stage || data.stage || 'foundation';
+    const num_stage = data.num_stage || data.stage || 'foundation';
+    const STAGE_ORDER = ['foundation', 'preparatory', 'middle', 'secondary'];
+
+    // Use caller-supplied promotion flags if provided, else calculate from %
+    const lit_promoted = data.lit_promoted !== undefined
+      ? data.lit_promoted
+      : (litTotal !== null && litTotal >= 80);
+    const num_promoted = data.num_promoted !== undefined
+      ? data.num_promoted
+      : (numTotal !== null && numTotal >= 80);
+
+    const litStageIdx = STAGE_ORDER.indexOf(lit_stage);
+    const numStageIdx = STAGE_ORDER.indexOf(num_stage);
+    const lit_promoted_to = lit_promoted && litStageIdx < 3 ? STAGE_ORDER[litStageIdx + 1] : null;
+    const num_promoted_to = num_promoted && numStageIdx < 3 ? STAGE_ORDER[numStageIdx + 1] : null;
+
+    // Overall promoted = both subjects promoted
+    const promoted = lit_promoted && num_promoted;
+    const promoted_to_stage = promoted ? lit_promoted_to : null;
+
+    // Store subject-wise promotion info in gaps field extension
+    const promotionInfo = { lit_promoted, num_promoted, lit_promoted_to, num_promoted_to, lit_stage, num_stage };
 
     const existing = await this.baselineRepo.findOne({
       where: {
@@ -362,7 +386,7 @@ export class BaselineService {
       numeracy_total,
       overall_score,
       level,
-      gaps,
+      gaps: { ...(gaps as any), ...promotionInfo },
       promoted,
       promoted_to_stage,
     };
@@ -453,6 +477,36 @@ export class BaselineService {
       return { teacher_id: t.id, teacher_name: t.name, assessment: a || null };
     });
 
+    // Stage progression across all rounds
+    const allTeacherAssessments = await this.baselineRepo.find({
+      where: { entity_type: EntityType.TEACHER, academic_year },
+      order: { round: 'ASC' },
+    });
+
+    const STAGE_GRADE_MAP: Record<string, string> = {
+      foundation: 'Grade 2', preparatory: 'Grade 5', middle: 'Grade 8', secondary: 'Grade 10',
+    };
+
+    const teacherStageProgression = teachers.map(t => {
+      const tAssessments = allTeacherAssessments.filter(a => a.entity_id === t.id);
+      const rounds: Record<string, any> = {};
+      tAssessments.forEach(a => {
+        const gaps = (a.gaps as any) || {};
+        rounds[a.round] = {
+          stage: a.stage,
+          lit_stage: gaps.lit_stage || a.stage,
+          num_stage: gaps.num_stage || a.stage,
+          lit_promoted: gaps.lit_promoted || false,
+          num_promoted: gaps.num_promoted || false,
+          lit_promoted_to: gaps.lit_promoted_to || null,
+          num_promoted_to: gaps.num_promoted_to || null,
+          lit_grade: STAGE_GRADE_MAP[gaps.lit_stage || a.stage] || 'Grade 2',
+          num_grade: STAGE_GRADE_MAP[gaps.num_stage || a.stage] || 'Grade 2',
+        };
+      });
+      return { teacher_id: t.id, teacher_name: t.name, rounds };
+    }).filter(t => Object.keys(t.rounds).length > 0);
+
     return {
       totalTeachers: teachers.length,
       assessed: assessed.length,
@@ -465,6 +519,7 @@ export class BaselineService {
       domainData,
       levelDist,
       teacherList,
+      teacherStageProgression,
     };
   }
 
