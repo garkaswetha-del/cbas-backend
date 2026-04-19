@@ -104,4 +104,9 @@ export class BaselineController {
   ) {
     return this.baselineService.getStudentRounds(student_id, academic_year || '2025-26');
   }
+
+  @Post('recalculate')
+  recalculateAll() {
+    return this.baselineService.recalculateAll();
+  }
 }

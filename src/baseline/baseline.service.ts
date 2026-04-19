@@ -93,6 +93,7 @@ export class BaselineService {
     return { promoted, promoted_to_stage };
   }
 
+
   // ── Save section baseline (admin entry) ────────────────────────
   async saveSectionBaseline(data: {
     grade: string;
@@ -742,5 +743,25 @@ export class BaselineService {
       order: { round: 'ASC' },
     });
     return { student, assessments };
+  }
+
+  // ── Recalculate all stored percentages ─────────────────────────
+  async recalculateAll() {
+    const all = await this.baselineRepo.find();
+    let updated = 0;
+    for (const a of all) {
+      const lit = (a.literacy_scores as Record<string, number>) || {};
+      const num = (a.numeracy_scores as Record<string, number>) || {};
+      const mm = (a.max_marks as Record<string, number>) || {};
+      const { literacy_pct, numeracy_pct, literacy_total, numeracy_total, overall_score } =
+        this.calculateTotals(lit, num, mm);
+      const level = overall_score !== undefined ? this.getLevel(overall_score) : a.level;
+      const gaps = this.getGaps(literacy_pct, numeracy_pct);
+      await this.baselineRepo.update(a.id, {
+        literacy_pct, numeracy_pct, literacy_total, numeracy_total, overall_score, level, gaps,
+      } as any);
+      updated++;
+    }
+    return { updated, message: `Recalculated ${updated} assessment records` };
   }
 }
