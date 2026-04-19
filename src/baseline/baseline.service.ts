@@ -22,12 +22,13 @@ export class BaselineService {
   calcPct(scores: Record<string, number>, maxMarks: Record<string, number>): Record<string, number> {
     const pct: Record<string, number> = {};
     for (const [domain, raw] of Object.entries(scores)) {
+      if (raw < 0) continue;
       const max = maxMarks[domain];
       if (max && max > 0) {
-        pct[domain] = +((raw / max) * 100).toFixed(2);
+        pct[domain] = +Math.min(100, (raw / max) * 100).toFixed(2);
       } else {
-        // No max mark defined — treat raw as percentage directly
-        pct[domain] = +raw.toFixed(2);
+        // No max mark defined — treat raw as percentage directly, cap at 100
+        pct[domain] = +Math.min(100, raw).toFixed(2);
       }
     }
     return pct;
