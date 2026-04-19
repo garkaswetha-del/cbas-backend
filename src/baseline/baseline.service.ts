@@ -116,18 +116,23 @@ export class BaselineService {
 
     for (const a of data.assessments) {
       try {
+        const existing = await this.baselineRepo.findOne({
+          where: { entity_id: a.student_id, entity_type: EntityType.STUDENT, academic_year: data.academic_year, round },
+        });
+
+        // Preserve existing max_marks if none provided in this save
+        const incomingMax = a.max_marks || {};
+        const hasMaxMarks = Object.values(incomingMax).some(v => v > 0);
+        const effectiveMax = hasMaxMarks ? incomingMax : ((existing?.max_marks as any) || {});
+
         const { literacy_pct, numeracy_pct, literacy_total, numeracy_total, overall_score } =
-          this.calculateTotals(a.literacy_scores || {}, a.numeracy_scores || {}, a.max_marks || {});
+          this.calculateTotals(a.literacy_scores || {}, a.numeracy_scores || {}, effectiveMax);
 
         const level = overall_score !== undefined ? this.getLevel(overall_score) : undefined;
         const gaps = this.getGaps(literacy_pct, numeracy_pct);
         const { promoted, promoted_to_stage } = overall_score !== undefined
           ? this.getPromotion(overall_score, a.stage || 'foundation')
           : { promoted: false, promoted_to_stage: null };
-
-        const existing = await this.baselineRepo.findOne({
-          where: { entity_id: a.student_id, entity_type: EntityType.STUDENT, academic_year: data.academic_year, round },
-        });
 
         const record: any = {
           entity_type: EntityType.STUDENT,
@@ -142,7 +147,7 @@ export class BaselineService {
           assessment_date: data.assessment_date,
           literacy_scores: a.literacy_scores || {},
           numeracy_scores: a.numeracy_scores || {},
-          max_marks: a.max_marks || {},
+          max_marks: effectiveMax,
           literacy_pct,
           numeracy_pct,
           literacy_total,
