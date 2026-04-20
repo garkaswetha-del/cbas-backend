@@ -45,6 +45,7 @@ export class UsersService {
     photo?: string;
     phone?: string;
     qualification?: string;
+    appraisal_qualification?: string;
     experience?: string;
   }) {
     const existing = await this.userRepo.findOne({ where: { email: data.email } });
@@ -66,6 +67,7 @@ export class UsersService {
       photo: data.photo,
       phone: data.phone,
       qualification: data.qualification,
+      appraisal_qualification: data.appraisal_qualification,
       experience: data.experience,
     });
     const saved = await this.userRepo.save(user);

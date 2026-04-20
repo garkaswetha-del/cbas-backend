@@ -55,6 +55,9 @@ export class User {
   qualification: string;
 
   @Column({ nullable: true })
+  appraisal_qualification: string;
+
+  @Column({ nullable: true })
   experience: string;
 
   @Column({ default: true })
