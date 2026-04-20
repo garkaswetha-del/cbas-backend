@@ -156,7 +156,19 @@ export class ActivitiesService {
       ? data.sections
       : data.section ? [data.section] : [];
 
+    const skipped: string[] = [];
     for (const section of sections) {
+      // Duplicate check: same name + grade + section + subject + academic_year
+      const duplicate = await this.activityRepo.findOne({
+        where: {
+          name: data.name, grade: data.grade, section,
+          subject: normalizeSubject(data.subject),
+          academic_year: data.academic_year || '2025-26',
+          is_active: true,
+        },
+      });
+      if (duplicate) { skipped.push(section); continue; }
+
       const activity = this.activityRepo.create({
         name: data.name, description: data.description, subject: normalizeSubject(data.subject),
         stage: data.stage, grade: data.grade, section,
@@ -169,7 +181,7 @@ export class ActivitiesService {
       const saved = await this.activityRepo.save(activity);
       created.push(saved);
     }
-    return { created_count: created.length, activities: created };
+    return { created_count: created.length, skipped_sections: skipped, activities: created };
   }
 
   async getActivities(filters: {
