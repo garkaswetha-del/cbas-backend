@@ -24,7 +24,7 @@ export class AppraisalService {
       return {
         teacher_id: teacher.id,
         teacher_name: teacher.name,
-        qualification: teacher.qualification || null,
+        appraisal_qualification: teacher.appraisal_qualification || teacher.qualification || null,
         salary: (teacher as any).salary || null,
         appraisal: appraisal || null,
       };
