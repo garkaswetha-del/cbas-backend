@@ -37,20 +37,29 @@ export class AppraisalService {
       where: { teacher_id, academic_year: data.academic_year },
     });
 
-    const exam_score = this.calculateExamScore(data);
+    const isNursery = !!(data as any).literacy_band || !!(data as any).numeracy_band;
+    const literacy_score = isNursery ? this.calculateLiteracyScore(data) : 0;
+    const numeracy_score = isNursery ? this.calculateNumeracyScore(data) : 0;
+    const exam_score = isNursery ? 0 : this.calculateExamScore(data);
     const skills_score = this.calculateSkillsScore(data);
     const behaviour_score = this.calculateBehaviourScore(data);
-    const parents_feedback_score = this.calculateParentsFeedbackScore(data);
-    const classroom_score = this.calculateClassroomScore(data);
-    const english_comm_score = this.calculateEnglishCommScore(data);
+    const parents_feedback_score = isNursery
+      ? this.calculateParentsFeedbackScore(data, 0.2)
+      : this.calculateParentsFeedbackScore(data, 0.1);
+    const classroom_score = isNursery
+      ? this.calculateClassroomScore(data, 0.2)
+      : this.calculateClassroomScore(data, 0.1);
+    const english_comm_score = isNursery
+      ? this.calculateEnglishCommScore(data, 0.2)
+      : this.calculateEnglishCommScore(data, 0.05);
     const responsibilities_score = this.calculateResponsibilitiesScore(data);
-    const overall_score = exam_score + skills_score + behaviour_score +
-      parents_feedback_score + classroom_score + english_comm_score + responsibilities_score;
+    const overall_score = literacy_score + numeracy_score + exam_score + skills_score +
+      behaviour_score + parents_feedback_score + classroom_score + english_comm_score + responsibilities_score;
     const overall_percentage = overall_score * 100;
 
     const appraisalData = {
-      ...data, teacher_id, exam_score, skills_score, behaviour_score,
-      parents_feedback_score, classroom_score, english_comm_score,
+      ...data, teacher_id, literacy_score, numeracy_score, exam_score, skills_score,
+      behaviour_score, parents_feedback_score, classroom_score, english_comm_score,
       responsibilities_score, overall_score, overall_percentage,
     };
 
@@ -87,6 +96,24 @@ export class AppraisalService {
     if (!appraisal) throw new NotFoundException('Appraisal not found');
     if (!appraisal.is_shared) throw new NotFoundException('Appraisal not shared');
     return appraisal;
+  }
+
+  private calculateLiteracyScore(data: any): number {
+    const map: Record<string, number> = {
+      'CREATIVE METHODS FOR PHONICS, VOCABULARY, READING & WRITING - EXCELLENT - 5': 5,
+      'REGULAR LITERACY PRACTICE USING STORIES, SONGS & WRITING - GOOD - 3': 3,
+      'IRREGULAR OR LESS ENGAGING LITERACY ACTIVITIES - NEEDS IMPROVEMENT - 2': 2,
+    };
+    return ((map[data.literacy_band ?? ''] ?? 0) / 5) * 0.1;
+  }
+
+  private calculateNumeracyScore(data: any): number {
+    const map: Record<string, number> = {
+      'HANDS ON NUMBER CONCEPTS (COUNTING, PATTERNS, ETC) - EXCELLENT - 5 MARKS': 5,
+      'REGULAR USE OF BASIC MATH THROUGH WORKSHEETS & OBJECTS - GOOD - 3 MARKS': 3,
+      'LIMITED STRATEGIES OR IRREGULAR TEACHING - NEEDS IMPROVEMENT - 2 MARKS': 2,
+    };
+    return ((map[data.numeracy_band ?? ''] ?? 0) / 5) * 0.1;
   }
 
   private calculateExamScore(data: Partial<TeacherAppraisal>): number {
@@ -137,31 +164,30 @@ export class AppraisalService {
     return (obtained / 10) * 0.1;
   }
 
-  private calculateParentsFeedbackScore(data: Partial<TeacherAppraisal>): number {
+  private calculateParentsFeedbackScore(data: Partial<TeacherAppraisal>, weight = 0.1): number {
     const map: Record<string, number> = {
       'BELOW 3:- 10%': 10, 'BELOW 5:- 8%': 8, 'BELOW 10:- 5%': 5, 'MORE THAN 10:- 2%': 2,
     };
-    return ((map[data.parents_feedback_band ?? ''] ?? 0) / 100) * 0.1;
+    return ((map[data.parents_feedback_band ?? ''] ?? 0) / 100) * weight;
   }
 
-  private calculateClassroomScore(data: Partial<TeacherAppraisal>): number {
+  private calculateClassroomScore(data: Partial<TeacherAppraisal>, weight = 0.1): number {
     const obs = data.classroom_observations as any[];
     if (!obs || !obs.length) return 0;
     const map: Record<string, number> = {
       'BELOW 10:- 3 MARKS': 3, '11 TO 15:- 5 MARKS': 5,
       '16 TO 19:- 8 MARKS': 8, '20 & ABOVE:- 10 MARKS': 10,
     };
-    // Single observation now
     const band = Array.isArray(obs) ? obs[0]?.band : null;
     const score = map[band ?? ''] ?? 0;
-    return (score / 10) * 0.1;
+    return (score / 10) * weight;
   }
 
-  private calculateEnglishCommScore(data: Partial<TeacherAppraisal>): number {
+  private calculateEnglishCommScore(data: Partial<TeacherAppraisal>, weight = 0.05): number {
     const map: Record<string, number> = {
       'BELOW 3:- 10%': 10, 'BELOW 5:- 8%': 8, 'BELOW 10:- 5%': 5, 'MORE THAN 10:- 2%': 2,
     };
-    return ((map[data.english_comm_band ?? ''] ?? 0) / 100) * 0.05;
+    return ((map[data.english_comm_band ?? ''] ?? 0) / 100) * weight;
   }
 
   private calculateResponsibilitiesScore(data: Partial<TeacherAppraisal>): number {

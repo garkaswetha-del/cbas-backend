@@ -40,6 +40,19 @@ export class TeacherAppraisal {
   @Column({ nullable: true })
   academic_year: string;
 
+  // NURSERY-SPECIFIC (Pre-KG / LKG / UKG)
+  @Column({ nullable: true })
+  literacy_band: string;
+
+  @Column({ nullable: true })
+  numeracy_band: string;
+
+  @Column({ type: 'decimal', precision: 5, scale: 4, default: 0 })
+  literacy_score: number;
+
+  @Column({ type: 'decimal', precision: 5, scale: 4, default: 0 })
+  numeracy_score: number;
+
   // EXAM MARKS
   @Column({ type: 'decimal', precision: 5, scale: 2, default: 0 })
   pa1: number;
