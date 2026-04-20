@@ -25,6 +25,7 @@ export class AppraisalService {
         teacher_id: teacher.id,
         teacher_name: teacher.name,
         appraisal_qualification: teacher.appraisal_qualification || teacher.qualification || null,
+        assigned_classes: teacher.assigned_classes || [],
         salary: (teacher as any).salary || null,
         appraisal: appraisal || null,
       };
