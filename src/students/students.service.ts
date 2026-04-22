@@ -15,9 +15,12 @@ export class StudentsService {
     grade?: string;
     section?: string;
     search?: string;
+    include_inactive?: boolean;
   }) {
-    const query = this.studentRepo.createQueryBuilder('student')
-      .where('student.is_active = :active', { active: true });
+    const query = this.studentRepo.createQueryBuilder('student');
+    if (!filters?.include_inactive) {
+      query.where('student.is_active = :active', { active: true });
+    }
 
     if (filters?.grade) {
       query.andWhere('LOWER(student.current_class) = LOWER(:grade)', { grade: filters.grade });

@@ -10,8 +10,9 @@ export class StudentsController {
     @Query('grade') grade?: string,
     @Query('section') section?: string,
     @Query('search') search?: string,
+    @Query('include_inactive') include_inactive?: string,
   ) {
-    return this.studentsService.findAll({ grade, section, search });
+    return this.studentsService.findAll({ grade, section, search, include_inactive: include_inactive === 'true' });
   }
 
   @Get('stats')
