@@ -64,10 +64,10 @@ export class User {
   is_active: boolean;
 
   @Column({ nullable: true, type: 'timestamp' })
-  deactivated_at: Date;
+  deactivated_at: Date | null;
 
   @Column({ nullable: true, type: 'timestamp' })
-  last_login_at: Date;
+  last_login_at: Date | null;
 
   @Column({ default: false })
   credentials_shared: boolean;
