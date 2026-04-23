@@ -61,6 +61,9 @@ export class Student {
   tc_date: string;
 
   @Column({ nullable: true })
+  tc_reason: string;
+
+  @Column({ nullable: true })
   graduation_year: string;
 
   @Column({ default: false })

@@ -101,10 +101,28 @@ export class StudentsService {
     return results;
   }
 
-  // Delete student (TC)
+  // Delete student (TC) — legacy soft delete
   async delete(id: string) {
-    await this.studentRepo.update(id, { is_active: false });
+    await this.studentRepo.update(id, { is_active: false, tc_date: new Date().toISOString().split('T')[0] });
     return { message: 'Student removed (TC)' };
+  }
+
+  // Issue TC with date + reason
+  async issueTC(id: string, tc_date: string, tc_reason?: string) {
+    await this.studentRepo.update(id, {
+      is_active: false,
+      tc_date: tc_date || new Date().toISOString().split('T')[0],
+      tc_reason: tc_reason || '',
+    });
+    return { message: 'TC issued successfully' };
+  }
+
+  // Get TC register (soft-deleted, non-graduated students)
+  async getTCRegister() {
+    return this.studentRepo.find({
+      where: { is_active: false, is_graduated: false },
+      order: { tc_date: 'DESC' },
+    });
   }
 
   // Permanently delete
@@ -279,6 +297,16 @@ export class StudentsService {
       .groupBy('student.current_class')
       .orderBy('student.current_class', 'ASC')
       .getRawMany();
-    return { total, byGrade };
+    const byGender = await this.studentRepo
+      .createQueryBuilder('student')
+      .select('student.gender', 'gender')
+      .addSelect('COUNT(*)', 'count')
+      .where('student.is_active = :active', { active: true })
+      .andWhere('student.gender IS NOT NULL')
+      .andWhere("student.gender != ''")
+      .groupBy('student.gender')
+      .getRawMany();
+    const tcCount = await this.studentRepo.count({ where: { is_active: false, is_graduated: false } });
+    return { total, byGrade, byGender, tcCount };
   }
 }

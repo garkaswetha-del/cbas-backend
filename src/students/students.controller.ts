@@ -20,6 +20,11 @@ export class StudentsController {
     return this.studentsService.getStats();
   }
 
+  @Get('tc-register')
+  getTCRegister() {
+    return this.studentsService.getTCRegister();
+  }
+
   // GET all defined sections across all grades
   @Get('sections/all')
   getAllSections() {
@@ -104,6 +109,14 @@ export class StudentsController {
   @Patch(':id')
   update(@Param('id') id: string, @Body() body: any) {
     return this.studentsService.update(id, body);
+  }
+
+  @Patch(':id/tc')
+  issueTC(
+    @Param('id') id: string,
+    @Body() body: { tc_date: string; tc_reason?: string },
+  ) {
+    return this.studentsService.issueTC(id, body.tc_date, body.tc_reason);
   }
 
   @Delete(':id')
