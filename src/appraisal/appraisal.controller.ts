@@ -45,4 +45,11 @@ export class AppraisalController {
   shareAppraisal(@Param('id') id: string) {
     return this.appraisalService.shareAppraisal(id);
   }
+
+  // PATCH unshare (recall) appraisal
+  // Usage: PATCH /appraisal/unshare/:id
+  @Patch('unshare/:id')
+  unshareAppraisal(@Param('id') id: string) {
+    return this.appraisalService.unshareAppraisal(id);
+  }
 }

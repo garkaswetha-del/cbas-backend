@@ -91,6 +91,13 @@ export class AppraisalService {
     return { message: 'Appraisal shared successfully', id };
   }
 
+  async unshareAppraisal(id: string) {
+    const appraisal = await this.appraisalRepo.findOne({ where: { id } });
+    if (!appraisal) throw new NotFoundException('Appraisal not found');
+    await this.appraisalRepo.update(id, { is_shared: false, shared_at: null });
+    return { message: 'Appraisal unshared', id };
+  }
+
   async getSharedAppraisal(id: string) {
     const appraisal = await this.appraisalRepo.findOne({ where: { id } });
     if (!appraisal) throw new NotFoundException('Appraisal not found');
@@ -172,14 +179,11 @@ export class AppraisalService {
   }
 
   private calculateClassroomScore(data: Partial<TeacherAppraisal>, weight = 0.1): number {
-    const obs = data.classroom_observations as any[];
-    if (!obs || !obs.length) return 0;
     const map: Record<string, number> = {
       'BELOW 10:- 3 MARKS': 3, '11 TO 15:- 5 MARKS': 5,
       '16 TO 19:- 8 MARKS': 8, '20 & ABOVE:- 10 MARKS': 10,
     };
-    const band = Array.isArray(obs) ? obs[0]?.band : null;
-    const score = map[band ?? ''] ?? 0;
+    const score = map[(data as any).classroom_observation_band ?? ''] ?? 0;
     return (score / 10) * weight;
   }
 

@@ -123,9 +123,9 @@ export class TeacherAppraisal {
   @Column({ type: 'decimal', precision: 5, scale: 4, default: 0 })
   parents_feedback_score: number;
 
-  // CLASSROOM TEACHING (up to 4 observations)
-  @Column({ type: 'jsonb', nullable: true })
-  classroom_observations: object;
+  // CLASSROOM TEACHING (single observation band)
+  @Column({ nullable: true })
+  classroom_observation_band: string;
 
   @Column({ type: 'decimal', precision: 5, scale: 4, default: 0 })
   classroom_score: number;
