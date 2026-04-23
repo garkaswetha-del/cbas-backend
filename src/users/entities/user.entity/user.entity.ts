@@ -63,6 +63,15 @@ export class User {
   @Column({ default: true })
   is_active: boolean;
 
+  @Column({ nullable: true, type: 'timestamp' })
+  deactivated_at: Date;
+
+  @Column({ nullable: true, type: 'timestamp' })
+  last_login_at: Date;
+
+  @Column({ default: false })
+  credentials_shared: boolean;
+
   @CreateDateColumn()
   created_at: Date;
 

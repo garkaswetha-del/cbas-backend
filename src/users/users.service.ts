@@ -11,14 +11,46 @@ export class UsersService {
     private userRepo: Repository<User>,
   ) {}
 
-  async findAll(role?: string) {
-    if (role) {
-      return this.userRepo.find({
-        where: { role: role as UserRole, is_active: true },
-        order: { name: 'ASC' },
-      });
+  async findAll(filters?: { role?: string; subject?: string; grade?: string; qualification?: string }) {
+    const query = this.userRepo.createQueryBuilder('user')
+      .where('user.is_active = :active', { active: true });
+
+    if (filters?.role) {
+      query.andWhere('user.role = :role', { role: filters.role });
     }
-    return this.userRepo.find({ order: { name: 'ASC' } });
+    if (filters?.qualification) {
+      query.andWhere('user.appraisal_qualification = :q', { q: filters.qualification });
+    }
+    if (filters?.subject) {
+      query.andWhere('user.subjects LIKE :subject', { subject: `%${filters.subject}%` });
+    }
+    if (filters?.grade) {
+      query.andWhere('user.assigned_classes LIKE :grade', { grade: `%${filters.grade}%` });
+    }
+
+    return query.orderBy('user.name', 'ASC').getMany();
+  }
+
+  async findInactive() {
+    return this.userRepo.find({
+      where: { is_active: false },
+      order: { deactivated_at: 'DESC' },
+    });
+  }
+
+  async getStats() {
+    const total = await this.userRepo.count({ where: { is_active: true } });
+    const inactive = await this.userRepo.count({ where: { is_active: false } });
+    const byQualification = await this.userRepo
+      .createQueryBuilder('user')
+      .select('user.appraisal_qualification', 'qualification')
+      .addSelect('COUNT(*)', 'count')
+      .where('user.is_active = true')
+      .andWhere('user.appraisal_qualification IS NOT NULL')
+      .groupBy('user.appraisal_qualification')
+      .getRawMany();
+
+    return { total, inactive, byQualification };
   }
 
   async findOne(id: string) {
@@ -69,6 +101,7 @@ export class UsersService {
       qualification: data.qualification,
       appraisal_qualification: data.appraisal_qualification,
       experience: data.experience,
+      credentials_shared: false,
     });
     const saved = await this.userRepo.save(user);
     const { password_hash: _, ...result } = saved;
@@ -76,7 +109,7 @@ export class UsersService {
   }
 
   async update(id: string, data: any) {
-    const user = await this.findOne(id);
+    await this.findOne(id);
 
     if (data.password && data.password.trim() !== '') {
       data.password_hash = await bcrypt.hash(data.password, 10);
@@ -84,7 +117,6 @@ export class UsersService {
       delete data.password;
     }
 
-    // Handle arrays — TypeORM simple-array needs clean arrays
     if (data.subjects && !Array.isArray(data.subjects)) data.subjects = [data.subjects];
     if (data.assigned_classes && !Array.isArray(data.assigned_classes)) data.assigned_classes = [data.assigned_classes];
     if (data.assigned_sections && !Array.isArray(data.assigned_sections)) data.assigned_sections = [data.assigned_sections];
@@ -93,17 +125,33 @@ export class UsersService {
     return this.findOne(id);
   }
 
+  async resetPassword(id: string, newPassword: string) {
+    const password_hash = await bcrypt.hash(newPassword, 10);
+    await this.userRepo.update(id, { password: newPassword, password_hash });
+    return { message: 'Password reset successfully' };
+  }
+
+  async markShared(id: string) {
+    await this.userRepo.update(id, { credentials_shared: true });
+    return { message: 'Credentials marked as shared' };
+  }
+
   async deactivate(id: string) {
-    await this.userRepo.update(id, { is_active: false });
+    await this.userRepo.update(id, { is_active: false, deactivated_at: new Date() });
     return { message: 'User deactivated' };
+  }
+
+  async reactivate(id: string) {
+    await this.userRepo.update(id, { is_active: true, deactivated_at: null });
+    return { message: 'User reactivated' };
   }
 
   async delete(id: string) {
     await this.userRepo.delete(id);
     return { message: 'User deleted permanently' };
   }
+
   async login(email: string, password: string) {
-    // Check hardcoded admin first
     if (email === 'garkaswetha@gmail.com' && password === 'swetha123') {
       return {
         success: true,
@@ -119,14 +167,14 @@ export class UsersService {
     const user = await this.userRepo.findOne({ where: { email, is_active: true } });
     if (!user) throw new NotFoundException('User not found');
 
-    // Check plain text password (stored during import)
     const plainMatch = user.password && user.password === password;
-    // Check bcrypt hash
     const hashMatch = await bcrypt.compare(password, user.password_hash);
 
     if (!plainMatch && !hashMatch) {
       throw new NotFoundException('Invalid password');
     }
+
+    await this.userRepo.update(user.id, { last_login_at: new Date() });
 
     return {
       success: true,
@@ -143,4 +191,4 @@ export class UsersService {
       },
     };
   }
-} 
+}

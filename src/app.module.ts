@@ -36,6 +36,8 @@ import { MappingsModule } from './mappings/mappings.module';
 import { TeacherMapping } from './mappings/entities/teacher-mapping.entity/teacher-mapping.entity';
 import { HomeworkRecord } from './homework/entities/homework-record.entity';
 import { HomeworkModule } from './homework/homework.module';
+import { TeacherAssignment } from './teacher-assignments/entities/teacher-assignment.entity';
+import { TeacherAssignmentsModule } from './teacher-assignments/teacher-assignments.module';
 
 @Module({
   imports: [
@@ -68,6 +70,7 @@ import { HomeworkModule } from './homework/homework.module';
           ExamMarks,
           TeacherMapping,
           HomeworkRecord,
+          TeacherAssignment,
         ],
         synchronize: true,
         logging: true,
@@ -91,6 +94,7 @@ import { HomeworkModule } from './homework/homework.module';
     PasaModule,
     MappingsModule,
     HomeworkModule,
+    TeacherAssignmentsModule,
   ],
 })
 export class AppModule {}
