@@ -187,7 +187,7 @@ export class TeacherAppraisal {
   @Column({ default: false })
   is_shared: boolean;
 
-  @Column({ nullable: true })
+  @Column({ type: 'varchar', nullable: true })
   shared_at: string | null;
 
   // COMMITTEE
