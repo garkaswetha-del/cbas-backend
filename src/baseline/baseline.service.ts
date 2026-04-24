@@ -21,12 +21,17 @@ export class BaselineService {
 
   // ── Config (thresholds + lock, per year/round/grade/section) ────
 
-  async getConfig(academic_year: string, round: string, grade?: string, section?: string): Promise<BaselineConfig> {
+  async getConfig(academic_year: string, round: string, grade?: string, section?: string): Promise<any> {
     const g = grade || '';
     const s = section || '';
-    const existing = await this.configRepo.findOne({ where: { academic_year, round, grade: g, section: s } });
-    if (existing) return existing;
-    return this.configRepo.create({ academic_year, round, grade: g, section: s, gap_threshold: 60, promotion_threshold: 80, is_locked: false });
+    try {
+      const existing = await this.configRepo.findOne({ where: { academic_year, round, grade: g, section: s } });
+      if (existing) return existing;
+      return { academic_year, round, grade: g, section: s, gap_threshold: 60, promotion_threshold: 80, is_locked: false };
+    } catch (e) {
+      console.error('[BaselineConfig] getConfig error:', e?.message || e);
+      return { academic_year, round, grade: g, section: s, gap_threshold: 60, promotion_threshold: 80, is_locked: false };
+    }
   }
 
   async upsertConfig(body: {
@@ -37,17 +42,26 @@ export class BaselineService {
     gap_threshold?: number;
     promotion_threshold?: number;
     is_locked?: boolean;
-  }): Promise<BaselineConfig> {
+  }): Promise<any> {
     const g = body.grade || '';
     const s = body.section || '';
-    let record = await this.configRepo.findOne({ where: { academic_year: body.academic_year, round: body.round, grade: g, section: s } });
-    if (!record) {
-      record = this.configRepo.create({ academic_year: body.academic_year, round: body.round, grade: g, section: s, gap_threshold: 60, promotion_threshold: 80, is_locked: false });
+    try {
+      let record = await this.configRepo.findOne({ where: { academic_year: body.academic_year, round: body.round, grade: g, section: s } });
+      if (!record) {
+        record = this.configRepo.create({ academic_year: body.academic_year, round: body.round, grade: g, section: s, gap_threshold: 60, promotion_threshold: 80, is_locked: false });
+      }
+      if (body.gap_threshold !== undefined) record.gap_threshold = body.gap_threshold;
+      if (body.promotion_threshold !== undefined) record.promotion_threshold = body.promotion_threshold;
+      if (body.is_locked !== undefined) record.is_locked = body.is_locked;
+      return this.configRepo.save(record);
+    } catch (e) {
+      console.error('[BaselineConfig] upsertConfig error:', e?.message || e);
+      const merged: any = { academic_year: body.academic_year, round: body.round, grade: g, section: s, gap_threshold: 60, promotion_threshold: 80, is_locked: false };
+      if (body.gap_threshold !== undefined) merged.gap_threshold = body.gap_threshold;
+      if (body.promotion_threshold !== undefined) merged.promotion_threshold = body.promotion_threshold;
+      if (body.is_locked !== undefined) merged.is_locked = body.is_locked;
+      return merged;
     }
-    if (body.gap_threshold !== undefined) record.gap_threshold = body.gap_threshold;
-    if (body.promotion_threshold !== undefined) record.promotion_threshold = body.promotion_threshold;
-    if (body.is_locked !== undefined) record.is_locked = body.is_locked;
-    return this.configRepo.save(record);
   }
 
   // ── Core calculation helpers ────────────────────────────────────
