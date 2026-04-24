@@ -1,6 +1,6 @@
 import { Injectable } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
+import { IsNull, Repository } from 'typeorm';
 import { BaselineAssessment, EntityType, AssessmentRound, AssessmentStage, AssessmentSubject } from '../assessments/entities/baseline-assessment.entity/baseline-assessment.entity';
 import { BaselineConfig } from '../assessments/entities/baseline-assessment.entity/baseline-config.entity';
 import { Student } from '../students/entities/student.entity/student.entity';
@@ -22,26 +22,31 @@ export class BaselineService {
   // ── Config (thresholds + lock, per year/round/grade/section) ────
 
   async getConfig(academic_year: string, round: string, grade?: string, section?: string): Promise<BaselineConfig> {
-    const where: any = { academic_year, round, grade: grade || null, section: section || null };
-    const existing = await this.configRepo.findOne({ where });
+    const g = grade || null;
+    const s = section || null;
+    const existing = await this.configRepo.findOne({
+      where: { academic_year, round, grade: g === null ? IsNull() : g, section: s === null ? IsNull() : s },
+    });
     if (existing) return existing;
-    // Return defaults without saving
-    return this.configRepo.create({ academic_year, round, grade: grade || null, section: section || null, gap_threshold: 60, promotion_threshold: 80, is_locked: false });
+    return this.configRepo.create({ academic_year, round, grade: g, section: s, gap_threshold: 60, promotion_threshold: 80, is_locked: false });
   }
 
   async upsertConfig(body: {
     academic_year: string;
     round: string;
-    grade?: string;
-    section?: string;
+    grade?: string | null;
+    section?: string | null;
     gap_threshold?: number;
     promotion_threshold?: number;
     is_locked?: boolean;
   }): Promise<BaselineConfig> {
-    const { academic_year, round, grade = null, section = null } = body;
-    let record = await this.configRepo.findOne({ where: { academic_year, round, grade, section } });
+    const g = body.grade ?? null;
+    const s = body.section ?? null;
+    let record = await this.configRepo.findOne({
+      where: { academic_year: body.academic_year, round: body.round, grade: g === null ? IsNull() : g, section: s === null ? IsNull() : s },
+    });
     if (!record) {
-      record = this.configRepo.create({ academic_year, round, grade, section, gap_threshold: 60, promotion_threshold: 80, is_locked: false });
+      record = this.configRepo.create({ academic_year: body.academic_year, round: body.round, grade: g, section: s, gap_threshold: 60, promotion_threshold: 80, is_locked: false });
     }
     if (body.gap_threshold !== undefined) record.gap_threshold = body.gap_threshold;
     if (body.promotion_threshold !== undefined) record.promotion_threshold = body.promotion_threshold;
