@@ -2,6 +2,7 @@ import { Injectable } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { BaselineAssessment, EntityType, AssessmentRound, AssessmentStage, AssessmentSubject } from '../assessments/entities/baseline-assessment.entity/baseline-assessment.entity';
+import { BaselineConfig } from '../assessments/entities/baseline-assessment.entity/baseline-config.entity';
 import { Student } from '../students/entities/student.entity/student.entity';
 import { User } from '../users/entities/user.entity/user.entity';
 
@@ -10,11 +11,43 @@ export class BaselineService {
   constructor(
     @InjectRepository(BaselineAssessment)
     private baselineRepo: Repository<BaselineAssessment>,
+    @InjectRepository(BaselineConfig)
+    private configRepo: Repository<BaselineConfig>,
     @InjectRepository(Student)
     private studentRepo: Repository<Student>,
     @InjectRepository(User)
     private userRepo: Repository<User>,
   ) {}
+
+  // ── Config (thresholds + lock, per year/round/grade/section) ────
+
+  async getConfig(academic_year: string, round: string, grade?: string, section?: string): Promise<BaselineConfig> {
+    const where: any = { academic_year, round, grade: grade || null, section: section || null };
+    const existing = await this.configRepo.findOne({ where });
+    if (existing) return existing;
+    // Return defaults without saving
+    return this.configRepo.create({ academic_year, round, grade: grade || null, section: section || null, gap_threshold: 60, promotion_threshold: 80, is_locked: false });
+  }
+
+  async upsertConfig(body: {
+    academic_year: string;
+    round: string;
+    grade?: string;
+    section?: string;
+    gap_threshold?: number;
+    promotion_threshold?: number;
+    is_locked?: boolean;
+  }): Promise<BaselineConfig> {
+    const { academic_year, round, grade = null, section = null } = body;
+    let record = await this.configRepo.findOne({ where: { academic_year, round, grade, section } });
+    if (!record) {
+      record = this.configRepo.create({ academic_year, round, grade, section, gap_threshold: 60, promotion_threshold: 80, is_locked: false });
+    }
+    if (body.gap_threshold !== undefined) record.gap_threshold = body.gap_threshold;
+    if (body.promotion_threshold !== undefined) record.promotion_threshold = body.promotion_threshold;
+    if (body.is_locked !== undefined) record.is_locked = body.is_locked;
+    return this.configRepo.save(record);
+  }
 
   // ── Core calculation helpers ────────────────────────────────────
 

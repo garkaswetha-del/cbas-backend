@@ -1,4 +1,4 @@
-import { Controller, Get, Post, Body, Param, Query } from '@nestjs/common';
+import { Controller, Get, Post, Patch, Body, Param, Query } from '@nestjs/common';
 import { BaselineService } from './baseline.service';
 
 @Controller('baseline')
@@ -108,5 +108,22 @@ export class BaselineController {
   @Post('recalculate')
   recalculateAll() {
     return this.baselineService.recalculateAll();
+  }
+
+  // ── Config: thresholds + lock, per year/round/grade/section ──────
+
+  @Get('config')
+  getConfig(
+    @Query('academic_year') academic_year: string,
+    @Query('round') round: string,
+    @Query('grade') grade: string,
+    @Query('section') section: string,
+  ) {
+    return this.baselineService.getConfig(academic_year || '2025-26', round || 'baseline_1', grade, section);
+  }
+
+  @Patch('config')
+  upsertConfig(@Body() body: any) {
+    return this.baselineService.upsertConfig(body);
   }
 }
