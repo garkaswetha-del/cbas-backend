@@ -3,7 +3,7 @@ import { Entity, PrimaryGeneratedColumn, Column, UpdateDateColumn } from 'typeor
 // Stores per-round thresholds and per-class lock state.
 // grade='' + section='' → school-wide threshold record for that year/round
 // grade+section set → lock record for that specific class
-@Entity('baseline_configs')
+@Entity('baseline_settings')
 export class BaselineConfig {
   @PrimaryGeneratedColumn('uuid')
   id: string;
