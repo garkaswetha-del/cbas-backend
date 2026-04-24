@@ -110,6 +110,12 @@ export class BaselineAssessment {
   @Column({ nullable: true })
   promoted_to_stage: string;
 
+  @Column({ default: false })
+  is_absent: boolean;
+
+  @Column({ type: 'text', nullable: true })
+  notes: string;
+
   @Column({ nullable: true })
   created_by: string;
 
