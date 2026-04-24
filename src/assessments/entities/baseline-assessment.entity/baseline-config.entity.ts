@@ -1,5 +1,8 @@
 import { Entity, PrimaryGeneratedColumn, Column, UpdateDateColumn } from 'typeorm';
 
+// Stores per-round thresholds and per-class lock state.
+// grade='' + section='' → school-wide threshold record for that year/round
+// grade+section set → lock record for that specific class
 @Entity('baseline_configs')
 export class BaselineConfig {
   @PrimaryGeneratedColumn('uuid')
@@ -11,14 +14,12 @@ export class BaselineConfig {
   @Column()
   round: string;
 
-  // null = school-wide threshold record; set = class-specific lock record
-  @Column({ nullable: true })
-  grade: string | null;
+  @Column({ default: '' })
+  grade: string;
 
-  @Column({ nullable: true })
-  section: string | null;
+  @Column({ default: '' })
+  section: string;
 
-  // thresholds (only meaningful when grade+section are null)
   @Column({ type: 'float', default: 60 })
   gap_threshold: number;
 
