@@ -1,7 +1,6 @@
-import { Entity, PrimaryGeneratedColumn, Column, UpdateDateColumn, Unique } from 'typeorm';
+import { Entity, PrimaryGeneratedColumn, Column, UpdateDateColumn } from 'typeorm';
 
 @Entity('baseline_configs')
-@Unique(['academic_year', 'round', 'grade', 'section'])
 export class BaselineConfig {
   @PrimaryGeneratedColumn('uuid')
   id: string;
