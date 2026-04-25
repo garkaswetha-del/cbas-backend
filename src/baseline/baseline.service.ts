@@ -1,13 +1,13 @@
-import { Injectable } from '@nestjs/common';
-import { InjectRepository } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
+import { Injectable, OnModuleInit } from '@nestjs/common';
+import { InjectRepository, InjectDataSource } from '@nestjs/typeorm';
+import { Repository, DataSource } from 'typeorm';
 import { BaselineAssessment, EntityType, AssessmentRound, AssessmentStage, AssessmentSubject } from '../assessments/entities/baseline-assessment.entity/baseline-assessment.entity';
 import { BaselineConfig } from '../assessments/entities/baseline-assessment.entity/baseline-config.entity';
 import { Student } from '../students/entities/student.entity/student.entity';
 import { User } from '../users/entities/user.entity/user.entity';
 
 @Injectable()
-export class BaselineService {
+export class BaselineService implements OnModuleInit {
   constructor(
     @InjectRepository(BaselineAssessment)
     private baselineRepo: Repository<BaselineAssessment>,
@@ -17,7 +17,30 @@ export class BaselineService {
     private studentRepo: Repository<Student>,
     @InjectRepository(User)
     private userRepo: Repository<User>,
+    @InjectDataSource()
+    private dataSource: DataSource,
   ) {}
+
+  async onModuleInit() {
+    try {
+      await this.dataSource.query(`
+        CREATE TABLE IF NOT EXISTS baseline_settings (
+          id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+          academic_year VARCHAR NOT NULL,
+          round VARCHAR NOT NULL,
+          grade VARCHAR NOT NULL DEFAULT '',
+          section VARCHAR NOT NULL DEFAULT '',
+          gap_threshold FLOAT NOT NULL DEFAULT 60,
+          promotion_threshold FLOAT NOT NULL DEFAULT 80,
+          is_locked BOOLEAN NOT NULL DEFAULT FALSE,
+          updated_at TIMESTAMP DEFAULT now()
+        )
+      `);
+      console.log('[BaselineConfig] baseline_settings table ensured');
+    } catch (e) {
+      console.error('[BaselineConfig] onModuleInit table creation error:', e?.message || e);
+    }
+  }
 
   // ── Config (thresholds + lock, per year/round/grade/section) ────
 
