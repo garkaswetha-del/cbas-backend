@@ -1,4 +1,4 @@
-import { Controller, Get, Post, Put, Delete, Body, Param, Query, UploadedFile, UseInterceptors } from '@nestjs/common';
+import { Controller, Get, Post, Put, Patch, Delete, Body, Param, Query, UploadedFile, UseInterceptors } from '@nestjs/common';
 import { FileInterceptor } from '@nestjs/platform-express';
 import { ActivitiesService } from './activities.service';
 import { normalizeSubject } from '../common/utils';
@@ -11,19 +11,17 @@ export class ActivitiesController {
 
   @Get('competencies')
   async getCompetencies(@Query() query: any) {
-    // Normalize subject to lowercase_underscore to match DB storage format
     const normalized = { ...query };
     if (normalized.subject) {
       normalized.subject = normalized.subject.trim().toLowerCase().replace(/\s+/g, '_');
     }
+    normalized.include_inactive = query.include_inactive === 'true';
     let raw = await this.activitiesService.getCompetencies(normalized);
-    // Fallback: try without grade if no results
-    if ((!raw || (raw as any[]).length === 0) && normalized.grade) {
+    if ((!raw || (raw as any[]).length === 0) && normalized.grade && !normalized.include_inactive) {
       raw = await this.activitiesService.getCompetencies({ subject: normalized.subject });
     }
-    // Fallback: try original subject string
     if (!raw || (raw as any[]).length === 0) {
-      raw = await this.activitiesService.getCompetencies(query);
+      raw = await this.activitiesService.getCompetencies({ ...query, include_inactive: normalized.include_inactive });
     }
     const list = Array.isArray(raw) ? raw : [];
     const competencies = list.map((c: any) => ({
@@ -63,6 +61,11 @@ export class ActivitiesController {
   @Delete('competencies/:id')
   deleteCompetency(@Param('id') id: string) {
     return this.activitiesService.deleteCompetency(id);
+  }
+
+  @Patch('competencies/:id/reactivate')
+  reactivateCompetency(@Param('id') id: string) {
+    return this.activitiesService.reactivateCompetency(id);
   }
 
   // ── ACTIVITY MANAGEMENT ───────────────────────────────────────

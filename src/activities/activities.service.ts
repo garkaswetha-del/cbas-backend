@@ -53,13 +53,19 @@ export class ActivitiesService {
 
   // ── COMPETENCY MANAGEMENT ─────────────────────────────────────
 
-  async getCompetencies(filters: { subject?: string; stage?: string; grade?: string; search?: string }) {
-    const query = this.competencyRepo.createQueryBuilder('c').where('c.is_active = true');
+  async getCompetencies(filters: { subject?: string; stage?: string; grade?: string; search?: string; include_inactive?: boolean }) {
+    const query = this.competencyRepo.createQueryBuilder('c');
+    if (!filters.include_inactive) query.where('c.is_active = true');
     if (filters.subject) query.andWhere('c.subject = :subject', { subject: filters.subject });
     if (filters.stage) query.andWhere('c.stage = :stage', { stage: filters.stage });
     if (filters.grade) query.andWhere('c.grade = :grade', { grade: filters.grade });
     if (filters.search) query.andWhere('(c.competency_code ILIKE :s OR c.description ILIKE :s)', { s: `%${filters.search}%` });
-    return query.orderBy('c.subject', 'ASC').addOrderBy('c.grade', 'ASC').addOrderBy('c.domain', 'ASC').getMany();
+    return query.orderBy('c.is_active', 'DESC').addOrderBy('c.subject', 'ASC').addOrderBy('c.grade', 'ASC').addOrderBy('c.domain', 'ASC').getMany();
+  }
+
+  async reactivateCompetency(id: string) {
+    await this.competencyRepo.update(id, { is_active: true });
+    return this.competencyRepo.findOne({ where: { id } });
   }
 
   async getCompetencyById(id: string) {
@@ -312,9 +318,9 @@ export class ActivitiesService {
             }
             const avgPct = allPcts.length ? AVG(allPcts) : comp_pct;
             await this.scoreRepo.update(existing_score.id, {
-              best_score: +(avgPct / 25).toFixed(2), // convert % to 0-4 scale for backward compat
+              best_score: Math.min(4.0, +(avgPct / 25).toFixed(2)),
               best_rating: comp_level,
-              attempt_count: allPcts.length,
+              attempt_count: existing_score.attempt_count + 1,
             });
           } else {
             await this.scoreRepo.save(this.scoreRepo.create({
@@ -322,7 +328,7 @@ export class ActivitiesService {
               grade: activity.grade, section: activity.section, academic_year,
               competency_id: comp_id, competency_code: competency.competency_code,
               subject: normalizeSubject(competency.subject), domain: competency.domain,
-              best_score: +(comp_pct / 25).toFixed(2),
+              best_score: Math.min(4.0, +(comp_pct / 25).toFixed(2)),
               best_rating: comp_level, attempt_count: 1,
             }));
           }
