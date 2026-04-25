@@ -334,7 +334,7 @@ export class ActivitiesService {
           }
         }
         results.saved++;
-      } catch (e) { results.failed++; }
+      } catch (e) { console.error('saveMarks failed for student:', entry?.student_id, e); results.failed++; }
     }
     return results;
   }
@@ -534,7 +534,7 @@ export class ActivitiesService {
     });
     const subjectSummary = Object.entries(bySubject).map(([subject, subScores]) => {
       const avg = AVG(subScores.map(s => +s.best_score));
-      return { subject, avg, level: PCT_TO_LEVEL(avg), competency_count: subScores.length };
+      return { subject, avg, level: PCT_TO_LEVEL(avg * 25), competency_count: subScores.length };
     });
 
     const byDomain: Record<string, any[]> = {};
@@ -546,7 +546,7 @@ export class ActivitiesService {
     const domainSummary = Object.entries(byDomain).map(([key, domScores]) => {
       const [subject, domain] = key.split('__');
       const avg = AVG(domScores.map(s => +s.best_score));
-      return { subject, domain, avg, level: PCT_TO_LEVEL(avg), count: domScores.length };
+      return { subject, domain, avg, level: PCT_TO_LEVEL(avg * 25), count: domScores.length };
     });
 
     // Individual competency scores
@@ -557,7 +557,7 @@ export class ActivitiesService {
       subject: s.subject,
       avg: +s.best_score,
       rating: (s as any).best_rating,
-      level: PCT_TO_LEVEL(+s.best_score),
+      level: PCT_TO_LEVEL(+s.best_score * 25),
       assessment_count: s.attempt_count,
     })).sort((a, b) => b.avg - a.avg);
 
@@ -583,7 +583,7 @@ export class ActivitiesService {
       });
       const a = studentScores.length ? AVG(studentScores.map(s => +s.best_score)) : 0;
       row.overall_avg = +a.toFixed(2);
-      row.level = PCT_TO_LEVEL(a);
+      row.level = PCT_TO_LEVEL(a * 25);
       return row;
     });
 
@@ -595,7 +595,7 @@ export class ActivitiesService {
       return {
         competency_id: cid, competency_code: sample?.competency_code,
         domain: sample?.domain || 'General', subject: sample?.subject,
-        avg: +a.toFixed(2), level: PCT_TO_LEVEL(a),
+        avg: +a.toFixed(2), level: PCT_TO_LEVEL(a * 25),
       };
     });
 
@@ -692,7 +692,7 @@ export class ActivitiesService {
     });
     const competencies = Object.entries(competencyMap).map(([id, data]) => ({
       competency_id: id, competency_code: data.code, domain: data.domain, subject: normalizeSubject(data.subject),
-      avg: AVG(data.scores), level: PCT_TO_LEVEL(AVG(data.scores)),
+      avg: AVG(data.scores), level: PCT_TO_LEVEL(AVG(data.scores) * 25),
     })).sort((a, b) => b.avg - a.avg);
 
     // Student averages for ranking
@@ -767,7 +767,7 @@ export class ActivitiesService {
     });
     const competencies = Object.entries(competencyMap).map(([id, data]) => ({
       competency_id: id, competency_code: data.code, domain: data.domain, subject: normalizeSubject(data.subject),
-      avg: AVG(data.scores), level: PCT_TO_LEVEL(AVG(data.scores)), count: data.scores.length,
+      avg: AVG(data.scores), level: PCT_TO_LEVEL(AVG(data.scores) * 25), count: data.scores.length,
     })).sort((a, b) => b.avg - a.avg);
 
     // Level distribution
@@ -841,7 +841,7 @@ export class ActivitiesService {
         const nb = parseInt(b[0].replace(/\D/g, '')) || 0;
         return na - nb;
       })
-      .map(([grade, scores]) => ({ grade, avg: AVG(scores), level: PCT_TO_LEVEL(AVG(scores)) }));
+      .map(([grade, scores]) => ({ grade, avg: AVG(scores), level: PCT_TO_LEVEL(AVG(scores) * 25) }));
 
     return { student, timeline, gradeTimeline, subjects, academicYears };
   }
