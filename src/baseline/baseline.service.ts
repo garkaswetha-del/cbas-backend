@@ -22,6 +22,12 @@ export class BaselineService implements OnModuleInit {
   ) {}
 
   async onModuleInit() {
+    // Ensure the baseline_settings table exists — TypeORM synchronize may fail
+    // silently for this entity if the old baseline_configs table was left in bad state.
+    // We run raw SQL as a guaranteed fallback.
+    try {
+      await this.dataSource.query(`CREATE EXTENSION IF NOT EXISTS "pgcrypto"`);
+    } catch { /* pgcrypto may already exist or not be needed */ }
     try {
       await this.dataSource.query(`
         CREATE TABLE IF NOT EXISTS baseline_settings (
@@ -30,8 +36,8 @@ export class BaselineService implements OnModuleInit {
           round VARCHAR NOT NULL,
           grade VARCHAR NOT NULL DEFAULT '',
           section VARCHAR NOT NULL DEFAULT '',
-          gap_threshold FLOAT NOT NULL DEFAULT 60,
-          promotion_threshold FLOAT NOT NULL DEFAULT 80,
+          gap_threshold DOUBLE PRECISION NOT NULL DEFAULT 60,
+          promotion_threshold DOUBLE PRECISION NOT NULL DEFAULT 80,
           is_locked BOOLEAN NOT NULL DEFAULT FALSE,
           updated_at TIMESTAMP DEFAULT now()
         )
