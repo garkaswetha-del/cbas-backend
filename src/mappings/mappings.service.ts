@@ -92,7 +92,7 @@ export class MappingsService {
       const classTeacherRow = activeMappings.find((m: any) => m.is_class_teacher);
       const class_teacher_of = classTeacherRow
         ? `${classTeacherRow.grade} ${classTeacherRow.section}`
-        : (teacher.class_teacher_of || '');
+        : '';
 
       await this.userRepo.update(teacher.id, {
         assigned_classes: grades,

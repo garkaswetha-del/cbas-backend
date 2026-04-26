@@ -188,8 +188,8 @@ export class SectionsService {
 
       // 7. teacher_appraisals
       updated.teacher_appraisals = await run(
-        `UPDATE teacher_appraisals SET section = $1 WHERE UPPER(section) = $2`,
-        [normalized, oldName],
+        `UPDATE teacher_appraisals SET section = $1 WHERE UPPER(section) = $2 AND grade = $3`,
+        [normalized, oldName, grade],
       );
 
       // 8. baseline_assessments
@@ -296,12 +296,20 @@ export class SectionsService {
     if (!sec) throw new BadRequestException('Section not found');
 
     // Check across all modules
+    const safeQuery = async (sql: string, params: any[]) => {
+      try { return await this.dataSource.query(sql, params); }
+      catch { return [{ c: '0' }]; }
+    };
     const checks = await Promise.all([
-      this.dataSource.query(`SELECT COUNT(*) as c FROM students WHERE current_class=$1 AND UPPER(section)=$2 AND is_active=true`, [sec.grade, sec.name]),
-      this.dataSource.query(`SELECT COUNT(*) as c FROM baseline_assessments WHERE grade=$1 AND UPPER(section)=$2`, [sec.grade, sec.name]),
-      this.dataSource.query(`SELECT COUNT(*) as c FROM exam_configs WHERE grade=$1 AND UPPER(section)=$2`, [sec.grade, sec.name]),
-      this.dataSource.query(`SELECT COUNT(*) as c FROM exam_marks WHERE grade=$1 AND UPPER(section)=$2`, [sec.grade, sec.name]),
-      this.dataSource.query(`SELECT COUNT(*) as c FROM activities WHERE grade=$1 AND UPPER(section)=$2`, [sec.grade, sec.name]),
+      safeQuery(`SELECT COUNT(*) as c FROM students WHERE current_class=$1 AND UPPER(section)=$2`, [sec.grade, sec.name]),
+      safeQuery(`SELECT COUNT(*) as c FROM baseline_assessments WHERE grade=$1 AND UPPER(section)=$2`, [sec.grade, sec.name]),
+      safeQuery(`SELECT COUNT(*) as c FROM exam_configs WHERE grade=$1 AND UPPER(section)=$2`, [sec.grade, sec.name]),
+      safeQuery(`SELECT COUNT(*) as c FROM exam_marks WHERE grade=$1 AND UPPER(section)=$2`, [sec.grade, sec.name]),
+      safeQuery(`SELECT COUNT(*) as c FROM activities WHERE grade=$1 AND UPPER(section)=$2`, [sec.grade, sec.name]),
+      safeQuery(`SELECT COUNT(*) as c FROM teacher_mappings WHERE grade=$1 AND section=$2`, [sec.grade, sec.name]),
+      safeQuery(`SELECT COUNT(*) as c FROM teacher_appraisals WHERE grade=$1 AND UPPER(section)=$2`, [sec.grade, sec.name]),
+      safeQuery(`SELECT COUNT(*) as c FROM ai_homework_records WHERE grade=$1 AND UPPER(section)=$2`, [sec.grade, sec.name]),
+      safeQuery(`SELECT COUNT(*) as c FROM teacher_observations WHERE grade_observed=$1 AND UPPER(section_observed)=$2`, [sec.grade, sec.name]),
     ]);
     const total = checks.reduce((sum, r) => sum + parseInt(r[0]?.c ?? '0', 10), 0);
     if (total > 0) throw new BadRequestException(`Cannot delete — ${total} record(s) still reference ${sec.name}`);
@@ -343,6 +351,7 @@ export class SectionsService {
       { table: 'activity_assessments', col: 'section' },
       { table: 'student_competency_scores', col: 'section' },
       { table: 'ai_homework_records', col: 'section' },
+      { table: 'teacher_observations', col: 'section_observed' },
     ];
     const result: Record<string, number> = {};
     for (const { table, col } of tables) {
