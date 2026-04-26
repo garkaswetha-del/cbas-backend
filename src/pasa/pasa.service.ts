@@ -194,10 +194,13 @@ export class PasaService {
       .orderBy('s.name', 'ASC')
       .getMany();
 
-    // Get existing marks
-    const marks = await this.marksRepo.find({
-      where: { exam_config_id, grade, section, is_active: true },
-    });
+    // Get existing marks — use case-insensitive lookup to match student query
+    const marks = await this.marksRepo.createQueryBuilder('m')
+      .where('m.exam_config_id = :exam_config_id', { exam_config_id })
+      .andWhere('LOWER(m.grade) = LOWER(:grade)', { grade })
+      .andWhere('LOWER(m.section) = LOWER(:section)', { section })
+      .andWhere('m.is_active = true')
+      .getMany();
 
     const marksMap: Record<string, any> = {};
     marks.forEach(m => { marksMap[m.student_id] = m; });
@@ -240,19 +243,25 @@ export class PasaService {
 
     // Per subject summary
     const subjectSummary = subjects.map(sub => {
-      const subMarks = allMarks.filter(m => m.subject === sub && !m.is_absent && m.percentage !== null);
+      const allSubjectMarks = allMarks.filter(m => m.subject === sub);
+      const subMarks = allSubjectMarks.filter(m => !m.is_absent && m.percentage !== null);
       const pcts = subMarks.map(m => +(m.percentage ?? 0));
       const compMap: Record<string, number[]> = {};
-      subMarks.forEach(m => {
+      // Initialize all competencies from any record (including absent) so none are silently omitted
+      allSubjectMarks.forEach(m => {
         (m.competency_scores as any[]).forEach((cs: any) => {
           if (!compMap[cs.competency_code]) compMap[cs.competency_code] = [];
+        });
+      });
+      subMarks.forEach(m => {
+        (m.competency_scores as any[]).forEach((cs: any) => {
           if (cs.marks_obtained !== null && cs.max_marks > 0) {
             compMap[cs.competency_code].push((cs.marks_obtained / cs.max_marks) * 100);
           }
         });
       });
       const competencyAvgs = Object.entries(compMap).map(([code, vals]) => ({
-        code, avg: avg(vals),
+        code, avg: vals.length > 0 ? avg(vals) : 0,
       }));
       return {
         subject: sub,
@@ -369,23 +378,36 @@ export class PasaService {
         const bi = EXAM_ORDER.indexOf(b.exam_type);
         return (ai === -1 ? 99 : ai) - (bi === -1 ? 99 : bi);
       });
-      if (sorted.length < 3) continue;
-      // Check for 2 consecutive declines
+      if (sorted.length < 2) continue;
+
+      let alerted = false;
+      // Check for 2 consecutive declines across 3 exams
       for (let i = 0; i <= sorted.length - 3; i++) {
-        const p1 = sorted[i].pct;
-        const p2 = sorted[i + 1].pct;
-        const p3 = sorted[i + 2].pct;
+        const p1 = sorted[i].pct, p2 = sorted[i + 1].pct, p3 = sorted[i + 2].pct;
         if (p1 > p2 && p2 > p3) {
           alerts.push({
             student_name: data.student_name,
             grade: data.grade, section: data.section,
-            subject: data.subject,
-            competency_code,
+            subject: data.subject, competency_code,
             exam_scores: sorted,
             decline_from: p1, decline_to: p3,
             drop: +(p1 - p3).toFixed(2),
           });
-          break;
+          alerted = true; break;
+        }
+      }
+      // Also check single significant decline when only 2 exams available (>= 15% drop)
+      if (!alerted && sorted.length === 2) {
+        const p1 = sorted[0].pct, p2 = sorted[1].pct;
+        const drop = +(p1 - p2).toFixed(2);
+        if (p1 > p2 && drop >= 15) {
+          alerts.push({
+            student_name: data.student_name,
+            grade: data.grade, section: data.section,
+            subject: data.subject, competency_code,
+            exam_scores: sorted,
+            decline_from: p1, decline_to: p2, drop,
+          });
         }
       }
     }
@@ -465,8 +487,10 @@ export class PasaService {
   // ── CLEAR OLD DATA ───────────────────────────────────────────
 
   async clearAllPasaData() {
-    await this.marksRepo.query('DELETE FROM exam_marks');
-    await this.configRepo.query('DELETE FROM exam_configs');
+    await this.marksRepo.manager.transaction(async manager => {
+      await manager.query('DELETE FROM exam_marks');
+      await manager.query('DELETE FROM exam_configs');
+    });
     return { success: true, message: 'All PASA data cleared' };
   }
 
