@@ -1,4 +1,4 @@
-import { Controller, Get, Post, Put, Delete, Body, Param, Query } from '@nestjs/common';
+import { Controller, Get, Post, Put, Patch, Delete, Body, Param, Query } from '@nestjs/common';
 import { ObservationService } from './observation.service';
 
 @Controller('observation')
@@ -35,6 +35,11 @@ export class ObservationController {
     );
   }
 
+  @Get('shared')
+  getSharedObservations(@Query('teacher_email') teacher_email: string) {
+    return this.observationService.getSharedObservations(teacher_email);
+  }
+
   @Get(':id')
   getObservationById(@Param('id') id: string) {
     return this.observationService.getObservationById(id);
@@ -43,6 +48,11 @@ export class ObservationController {
   @Put(':id')
   updateObservation(@Param('id') id: string, @Body() body: any) {
     return this.observationService.updateObservation(id, body);
+  }
+
+  @Patch(':id/share')
+  shareObservation(@Param('id') id: string, @Body() body: { is_shared: boolean }) {
+    return this.observationService.shareObservation(id, body.is_shared);
   }
 
   @Delete(':id')

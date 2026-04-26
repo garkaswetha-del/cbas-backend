@@ -104,6 +104,23 @@ export class ObservationService {
     return { message: 'Observation deleted' };
   }
 
+  // ── SHARE OBSERVATION ────────────────────────────────────
+
+  async shareObservation(id: string, is_shared: boolean) {
+    await this.obsRepo.update(id, { is_shared });
+    return { message: is_shared ? 'Observation shared' : 'Share removed', id, is_shared };
+  }
+
+  // ── GET SHARED OBSERVATIONS (teacher view) ───────────────
+
+  async getSharedObservations(teacher_email: string) {
+    if (!teacher_email) return [];
+    return this.obsRepo.find({
+      where: { teacher_email, is_shared: true, is_active: true },
+      order: { observation_date: 'DESC' },
+    });
+  }
+
   // ── DASHBOARD ────────────────────────────────────────────
 
   async getDashboard(academic_year: string) {
@@ -112,14 +129,16 @@ export class ObservationService {
       order: { teacher_name: 'ASC', observation_date: 'ASC' },
     });
 
-    // Group by teacher
+    // Group by teacher (case-insensitive key to merge name variants)
     const teacherMap: Record<string, any[]> = {};
     all.forEach(o => {
-      if (!teacherMap[o.teacher_name]) teacherMap[o.teacher_name] = [];
-      teacherMap[o.teacher_name].push(o);
+      const key = (o.teacher_name || '').toLowerCase().trim();
+      if (!teacherMap[key]) teacherMap[key] = [];
+      teacherMap[key].push(o);
     });
 
-    const teacherSummaries = Object.entries(teacherMap).map(([name, obs]) => {
+    const teacherSummaries = Object.entries(teacherMap).map(([, obs]) => {
+      const name = obs[0].teacher_name;
       const avgPct = obs.reduce((sum, o) => sum + (+o.percentage), 0) / obs.length;
       const avgScore = obs.reduce((sum, o) => sum + (+o.total_score), 0) / obs.length;
 
