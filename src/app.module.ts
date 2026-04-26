@@ -38,6 +38,9 @@ import { HomeworkRecord } from './homework/entities/homework-record.entity';
 import { HomeworkModule } from './homework/homework.module';
 import { TeacherAssignment } from './teacher-assignments/entities/teacher-assignment.entity';
 import { TeacherAssignmentsModule } from './teacher-assignments/teacher-assignments.module';
+import { Section } from './sections/entities/section.entity';
+import { SectionsModule } from './sections/sections.module';
+import { BaselineConfigV2 } from './baseline/entities/baseline-config-v2.entity';
 
 @Module({
   imports: [
@@ -71,6 +74,8 @@ import { TeacherAssignmentsModule } from './teacher-assignments/teacher-assignme
           TeacherMapping,
           HomeworkRecord,
           TeacherAssignment,
+          Section,
+          BaselineConfigV2,
         ],
         synchronize: true,
         logging: true,
@@ -95,6 +100,7 @@ import { TeacherAssignmentsModule } from './teacher-assignments/teacher-assignme
     MappingsModule,
     HomeworkModule,
     TeacherAssignmentsModule,
+    SectionsModule,
   ],
 })
 export class AppModule {}

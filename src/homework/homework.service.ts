@@ -1,13 +1,15 @@
-import { Injectable } from '@nestjs/common';
+import { Injectable, BadRequestException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { HomeworkRecord } from './entities/homework-record.entity';
+import { SectionsService } from '../sections/sections.service';
 
 @Injectable()
 export class HomeworkService {
   constructor(
     @InjectRepository(HomeworkRecord)
     private readonly homeworkRepo: Repository<HomeworkRecord>,
+    private sectionsService: SectionsService,
   ) {}
 
   // Save a homework record
@@ -29,6 +31,8 @@ export class HomeworkService {
     student_id?: string;
     student_name?: string;
   }) {
+    const valid = await this.sectionsService.validate(data.grade, data.section, data.academic_year);
+    if (!valid) throw new BadRequestException(`Section '${data.section}' does not exist for ${data.grade} in ${data.academic_year}`);
     const record = this.homeworkRepo.create(data);
     await this.homeworkRepo.save(record);
     return { success: true, record };

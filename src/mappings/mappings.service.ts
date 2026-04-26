@@ -5,6 +5,7 @@ import { TeacherMapping } from './entities/teacher-mapping.entity/teacher-mappin
 import { User } from '../users/entities/user.entity/user.entity';
 import { UserRole } from '../users/entities/user.entity/user.entity';
 import { Student } from '../students/entities/student.entity/student.entity';
+import { SectionsService } from '../sections/sections.service';
 
 @Injectable()
 export class MappingsService {
@@ -15,6 +16,7 @@ export class MappingsService {
     private userRepo: Repository<User>,
     @InjectRepository(Student)
     private studentRepo: Repository<Student>,
+    private sectionsService: SectionsService,
   ) {}
 
   private normalizeGrade(g: string): string {
@@ -63,9 +65,42 @@ export class MappingsService {
 
   async saveTeacherMappings(data: any) {
     await this.mappingRepo.update({ teacher_id: data.teacher_id, academic_year: data.academic_year }, { is_active: false });
+
+    const teacher = await this.userRepo.findOne({ where: { id: data.teacher_id } });
+
     for (const m of data.mappings) {
-      await this.mappingRepo.save(this.mappingRepo.create({ teacher_id: data.teacher_id, academic_year: data.academic_year, grade: m.grade, section: m.section, subject: m.subject, is_class_teacher: m.is_class_teacher || false, is_active: true }));
+      const teacherName = teacher?.name || m.teacher_name || '';
+      const teacherEmail = teacher?.email || m.teacher_email || '';
+      await this.mappingRepo.save(this.mappingRepo.create({
+        teacher_id: data.teacher_id,
+        teacher_name: teacherName,
+        teacher_email: teacherEmail,
+        academic_year: data.academic_year,
+        grade: m.grade,
+        section: m.section,
+        subject: m.subject,
+        is_class_teacher: m.is_class_teacher || false,
+        is_active: true,
+      }));
     }
+
+    // Sync users table so getTeacherDashboardMappings stays accurate
+    if (teacher) {
+      const activeMappings = data.mappings as any[];
+      const grades = [...new Set(activeMappings.map((m: any) => m.grade).filter(Boolean))] as string[];
+      const sections = [...new Set(activeMappings.map((m: any) => m.section).filter(Boolean))] as string[];
+      const classTeacherRow = activeMappings.find((m: any) => m.is_class_teacher);
+      const class_teacher_of = classTeacherRow
+        ? `${classTeacherRow.grade} ${classTeacherRow.section}`
+        : (teacher.class_teacher_of || '');
+
+      await this.userRepo.update(teacher.id, {
+        assigned_classes: grades,
+        assigned_sections: sections,
+        class_teacher_of,
+      });
+    }
+
     return { success: true };
   }
 
@@ -78,6 +113,31 @@ export class MappingsService {
   async getTeacherDashboardMappings(teacher_id: string, academic_year: string) {
     const user = await this.userRepo.findOne({ where: { id: teacher_id } });
     if (!user) return { teacher_id, academic_year, is_class_teacher: false, class_grade: null, class_section: null, mappings: [] };
+
+    // Primary source: teacher_mappings table (kept in sync by saveTeacherMappings)
+    const dbMappings = await this.mappingRepo.find({
+      where: { teacher_id, academic_year, is_active: true },
+    });
+
+    if (dbMappings.length > 0) {
+      const mappings = dbMappings.map(m => ({
+        grade: m.grade,
+        section: m.section,
+        subject: m.subject || null,
+        is_class_teacher: m.is_class_teacher,
+      }));
+      const ctRow = dbMappings.find(m => m.is_class_teacher);
+      return {
+        teacher_id,
+        academic_year,
+        is_class_teacher: !!ctRow,
+        class_grade: ctRow?.grade ?? null,
+        class_section: ctRow?.section ?? null,
+        mappings,
+      };
+    }
+
+    // Fallback: derive from users table fields (legacy path for teachers with no explicit mappings)
     const classes: string[] = [...new Set((user.assigned_classes || []).filter(Boolean).map(c => this.normalizeGrade(c)).filter(Boolean))];
     const rawSections: string[] = (user.assigned_sections || []).filter(Boolean);
     let allSections = false;

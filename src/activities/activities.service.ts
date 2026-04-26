@@ -1,6 +1,7 @@
-import { Injectable } from '@nestjs/common';
+import { Injectable, BadRequestException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
+import { SectionsService } from '../sections/sections.service';
 import { Activity } from './entities/activity.entity/activity.entity';
 import { ActivityAssessment } from './entities/activity-assessment.entity/activity-assessment.entity';
 import { StudentCompetencyScore } from './entities/student-competency-score.entity/student-competency-score.entity';
@@ -49,6 +50,7 @@ export class ActivitiesService {
     @InjectRepository(StudentCompetencyScore) private scoreRepo: Repository<StudentCompetencyScore>,
     @InjectRepository(CompetencyFramework) private competencyRepo: Repository<CompetencyFramework>,
     @InjectRepository(Student) private studentRepo: Repository<Student>,
+    private sectionsService: SectionsService,
   ) {}
 
   // ── COMPETENCY MANAGEMENT ─────────────────────────────────────
@@ -161,6 +163,12 @@ export class ActivitiesService {
     const sections: string[] = data.sections && data.sections.length
       ? data.sections
       : data.section ? [data.section] : [];
+
+    // Validate each section before saving
+    for (const sec of sections) {
+      const valid = await this.sectionsService.validate(data.grade, sec, data.academic_year || '2025-26');
+      if (!valid) throw new BadRequestException(`Section '${sec}' does not exist for ${data.grade} in ${data.academic_year || '2025-26'}`);
+    }
 
     const skipped: string[] = [];
     for (const section of sections) {

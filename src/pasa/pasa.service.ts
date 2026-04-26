@@ -1,10 +1,11 @@
-import { Injectable } from '@nestjs/common';
+import { Injectable, BadRequestException } from '@nestjs/common';
 import { normalizeSubject } from '../common/utils';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { ExamConfig } from './entities/exam-config.entity/exam-config.entity';
 import { ExamMarks } from './entities/exam-marks.entity/exam-marks.entity';
 import { Student } from '../students/entities/student.entity/student.entity';
+import { SectionsService } from '../sections/sections.service';
 
 const safeNum = (v: any) => (v === null || v === undefined || v === '' ? null : +v);
 const avg = (arr: number[]) => arr.length ? +(arr.reduce((a, b) => a + b, 0) / arr.length).toFixed(2) : 0;
@@ -17,6 +18,7 @@ export class PasaService {
     @InjectRepository(ExamConfig) private configRepo: Repository<ExamConfig>,
     @InjectRepository(ExamMarks) private marksRepo: Repository<ExamMarks>,
     @InjectRepository(Student) private studentRepo: Repository<Student>,
+    private sectionsService: SectionsService,
   ) {}
 
   // ── EXAM CONFIG ──────────────────────────────────────────────
@@ -33,6 +35,9 @@ export class PasaService {
     exam_date?: string;
     description?: string;
   }) {
+    const sectionValid = await this.sectionsService.validate(data.grade, data.section, data.academic_year);
+    if (!sectionValid) throw new BadRequestException(`Section '${data.section}' does not exist for ${data.grade} in ${data.academic_year}`);
+
     const total_marks = data.competencies.reduce((sum, c) => sum + (+c.max_marks || 0), 0);
 
     // Check if config already exists for this exam
@@ -125,6 +130,9 @@ export class PasaService {
       }[];
     }[];
   }) {
+    const sectionValid = await this.sectionsService.validate(data.grade, data.section, data.academic_year);
+    if (!sectionValid) throw new BadRequestException(`Section '${data.section}' does not exist for ${data.grade} in ${data.academic_year}`);
+
     let saved = 0;
     for (const entry of data.entries) {
       // Calculate totals

@@ -6,11 +6,13 @@ import { PasaController } from './pasa.controller';
 import { ExamConfig } from './entities/exam-config.entity/exam-config.entity';
 import { ExamMarks } from './entities/exam-marks.entity/exam-marks.entity';
 import { Student } from '../students/entities/student.entity/student.entity';
+import { SectionsModule } from '../sections/sections.module';
 
 @Module({
   imports: [
     TypeOrmModule.forFeature([ExamConfig, ExamMarks, Student]),
     MulterModule.register(),
+    SectionsModule,
   ],
   providers: [PasaService],
   controllers: [PasaController],

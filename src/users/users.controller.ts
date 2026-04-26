@@ -15,6 +15,12 @@ export class UsersController {
     return this.usersService.findInactive();
   }
 
+  /** GET /users/me?email=teacher@school.com — returns fresh user profile from DB */
+  @Get('me')
+  getMe(@Query('email') email: string) {
+    return this.usersService.getMe(email);
+  }
+
   @Get()
   findAll(
     @Query('role') role?: string,

@@ -63,6 +63,23 @@ export class UsersService {
     return this.userRepo.findOne({ where: { email } });
   }
 
+  async getMe(email: string) {
+    if (!email) throw new NotFoundException('Email required');
+    const user = await this.userRepo.findOne({ where: { email, is_active: true } });
+    if (!user) throw new NotFoundException('User not found');
+    return {
+      id: user.id,
+      name: user.name,
+      email: user.email,
+      role: user.role,
+      photo: user.photo,
+      subjects: user.subjects,
+      assigned_classes: user.assigned_classes,
+      assigned_sections: user.assigned_sections,
+      class_teacher_of: user.class_teacher_of,
+    };
+  }
+
   async create(data: {
     name: string;
     email: string;

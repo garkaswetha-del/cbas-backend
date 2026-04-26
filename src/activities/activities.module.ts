@@ -8,11 +8,13 @@ import { ActivityAssessment } from './entities/activity-assessment.entity/activi
 import { StudentCompetencyScore } from './entities/student-competency-score.entity/student-competency-score.entity';
 import { CompetencyFramework } from '../competencies/entities/competency-framework.entity/competency-framework.entity';
 import { Student } from '../students/entities/student.entity/student.entity';
+import { SectionsModule } from '../sections/sections.module';
 
 @Module({
   imports: [
     TypeOrmModule.forFeature([Activity, ActivityAssessment, StudentCompetencyScore, CompetencyFramework, Student]),
     MulterModule.register({ limits: { fileSize: 10 * 1024 * 1024 } }),
+    SectionsModule,
   ],
   providers: [ActivitiesService],
   controllers: [ActivitiesController],

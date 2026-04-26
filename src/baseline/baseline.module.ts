@@ -6,9 +6,11 @@ import { BaselineAssessment } from '../assessments/entities/baseline-assessment.
 import { Student } from '../students/entities/student.entity/student.entity';
 import { User } from '../users/entities/user.entity/user.entity';
 import { LearningLink } from '../assessments/entities/learning-link.entity/learning-link.entity';
+import { SectionsModule } from '../sections/sections.module';
+import { BaselineConfigV2 } from './entities/baseline-config-v2.entity';
 
 @Module({
-  imports: [TypeOrmModule.forFeature([BaselineAssessment, Student, User, LearningLink])],
+  imports: [TypeOrmModule.forFeature([BaselineAssessment, Student, User, LearningLink, BaselineConfigV2]), SectionsModule],
   controllers: [BaselineController],
   providers: [BaselineService],
   exports: [BaselineService],

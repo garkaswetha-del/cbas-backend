@@ -1,12 +1,14 @@
-import { Injectable, OnModuleInit } from '@nestjs/common';
+import { Injectable, BadRequestException } from '@nestjs/common';
 import { InjectRepository, InjectDataSource } from '@nestjs/typeorm';
 import { Repository, DataSource } from 'typeorm';
 import { BaselineAssessment, EntityType, AssessmentRound, AssessmentStage, AssessmentSubject } from '../assessments/entities/baseline-assessment.entity/baseline-assessment.entity';
 import { Student } from '../students/entities/student.entity/student.entity';
 import { User } from '../users/entities/user.entity/user.entity';
+import { SectionsService } from '../sections/sections.service';
+import { BaselineConfigV2 } from './entities/baseline-config-v2.entity';
 
 @Injectable()
-export class BaselineService implements OnModuleInit {
+export class BaselineService {
   constructor(
     @InjectRepository(BaselineAssessment)
     private baselineRepo: Repository<BaselineAssessment>,
@@ -14,31 +16,13 @@ export class BaselineService implements OnModuleInit {
     private studentRepo: Repository<Student>,
     @InjectRepository(User)
     private userRepo: Repository<User>,
+    @InjectRepository(BaselineConfigV2)
+    private configRepo: Repository<BaselineConfigV2>,
     @InjectDataSource()
     private dataSource: DataSource,
+    private sectionsService: SectionsService,
   ) {}
 
-  async onModuleInit() {
-    // Create config table with raw SQL — bypasses all TypeORM entity sync issues
-    try {
-      await this.dataSource.query(`
-        CREATE TABLE IF NOT EXISTS baseline_configs_v2 (
-          id SERIAL PRIMARY KEY,
-          academic_year VARCHAR(20) NOT NULL,
-          round VARCHAR(20) NOT NULL,
-          grade VARCHAR(100) NOT NULL DEFAULT '',
-          section VARCHAR(100) NOT NULL DEFAULT '',
-          gap_threshold DOUBLE PRECISION NOT NULL DEFAULT 60,
-          promotion_threshold DOUBLE PRECISION NOT NULL DEFAULT 80,
-          is_locked BOOLEAN NOT NULL DEFAULT FALSE,
-          updated_at TIMESTAMP DEFAULT now(),
-          UNIQUE(academic_year, round, grade, section)
-        )
-      `);
-    } catch (e) {
-      console.error('[BaselineConfig] table init error:', e?.message || e);
-    }
-  }
 
   private defaultConfig(academic_year: string, round: string, grade: string, section: string) {
     return { academic_year, round, grade, section, gap_threshold: 60, promotion_threshold: 80, is_locked: false };
@@ -49,17 +33,8 @@ export class BaselineService implements OnModuleInit {
   async getConfig(academic_year: string, round: string, grade?: string, section?: string): Promise<any> {
     const g = grade || '';
     const s = section || '';
-    try {
-      const rows = await this.dataSource.query(
-        `SELECT * FROM baseline_configs_v2 WHERE academic_year=$1 AND round=$2 AND grade=$3 AND section=$4 LIMIT 1`,
-        [academic_year, round, g, s],
-      );
-      if (rows.length) return rows[0];
-      return this.defaultConfig(academic_year, round, g, s);
-    } catch (e) {
-      console.error('[BaselineConfig] getConfig error:', e?.message || e);
-      return this.defaultConfig(academic_year, round, g, s);
-    }
+    const row = await this.configRepo.findOne({ where: { academic_year, round, grade: g, section: s } });
+    return row ?? this.defaultConfig(academic_year, round, g, s);
   }
 
   async upsertConfig(body: {
@@ -73,32 +48,25 @@ export class BaselineService implements OnModuleInit {
   }): Promise<any> {
     const g = body.grade || '';
     const s = body.section || '';
-    const gap = body.gap_threshold ?? 60;
-    const promo = body.promotion_threshold ?? 80;
-    const locked = body.is_locked ?? false;
-    try {
-      // Fetch existing to merge (so partial updates don't reset other fields)
-      const existing = await this.dataSource.query(
-        `SELECT * FROM baseline_configs_v2 WHERE academic_year=$1 AND round=$2 AND grade=$3 AND section=$4 LIMIT 1`,
-        [body.academic_year, body.round, g, s],
-      );
-      const cur = existing[0] || this.defaultConfig(body.academic_year, body.round, g, s);
-      const finalGap = body.gap_threshold !== undefined ? body.gap_threshold : +cur.gap_threshold;
-      const finalPromo = body.promotion_threshold !== undefined ? body.promotion_threshold : +cur.promotion_threshold;
-      const finalLocked = body.is_locked !== undefined ? body.is_locked : cur.is_locked;
+    const existing = await this.configRepo.findOne({
+      where: { academic_year: body.academic_year, round: body.round, grade: g, section: s },
+    });
+    const cur = existing ?? this.defaultConfig(body.academic_year, body.round, g, s);
+    const finalGap = body.gap_threshold !== undefined ? body.gap_threshold : +cur.gap_threshold;
+    const finalPromo = body.promotion_threshold !== undefined ? body.promotion_threshold : +cur.promotion_threshold;
+    const finalLocked = body.is_locked !== undefined ? body.is_locked : cur.is_locked;
 
-      const rows = await this.dataSource.query(`
-        INSERT INTO baseline_configs_v2 (academic_year, round, grade, section, gap_threshold, promotion_threshold, is_locked, updated_at)
-        VALUES ($1, $2, $3, $4, $5, $6, $7, now())
-        ON CONFLICT (academic_year, round, grade, section)
-        DO UPDATE SET gap_threshold=$5, promotion_threshold=$6, is_locked=$7, updated_at=now()
-        RETURNING *
-      `, [body.academic_year, body.round, g, s, finalGap, finalPromo, finalLocked]);
-      return rows[0];
-    } catch (e) {
-      console.error('[BaselineConfig] upsertConfig error:', e?.message || e);
-      return { academic_year: body.academic_year, round: body.round, grade: g, section: s, gap_threshold: gap, promotion_threshold: promo, is_locked: locked };
-    }
+    const record = this.configRepo.create({
+      ...(existing ?? {}),
+      academic_year: body.academic_year,
+      round: body.round,
+      grade: g,
+      section: s,
+      gap_threshold: finalGap,
+      promotion_threshold: finalPromo,
+      is_locked: finalLocked,
+    });
+    return this.configRepo.save(record);
   }
 
   // ── Core calculation helpers ────────────────────────────────────
@@ -195,6 +163,9 @@ export class BaselineService implements OnModuleInit {
       max_marks: Record<string, number>;
     }>;
   }) {
+    const sectionValid = await this.sectionsService.validate(data.grade, data.section, data.academic_year);
+    if (!sectionValid) throw new BadRequestException(`Section '${data.section}' does not exist for ${data.grade} in ${data.academic_year}`);
+
     const results = { success: 0, failed: 0 };
     const round = data.round as AssessmentRound;
     const stage = (data.assessments[0]?.stage || 'foundation') as AssessmentStage;

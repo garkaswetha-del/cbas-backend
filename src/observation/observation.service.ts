@@ -46,6 +46,7 @@ export class ObservationService {
       teacher_name: data.teacher_name,
       teacher_email: data.teacher_email,
       grade_observed: data.grade_observed,
+      section_observed: data.section_observed || null,
       subject_observed: data.subject_observed,
       block_number: data.block_number,
       lesson_plan_available: data.lesson_plan_available || false,
