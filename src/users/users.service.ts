@@ -56,27 +56,53 @@ export class UsersService {
 
   async normalizeQualifications() {
     const em = this.userRepo.manager;
-    // Step 1: collapse B.ED → BED (dots removed, case-insensitive)
+
+    // Step 1: uppercase + trim everything first
     await em.query(`
-      UPDATE users
-      SET appraisal_qualification = REGEXP_REPLACE(appraisal_qualification, 'B\\.ED', 'BED', 'gi')
-      WHERE appraisal_qualification ~* 'B\\.ED'
-    `);
-    // Step 2: collapse D.ED → DED
-    await em.query(`
-      UPDATE users
-      SET appraisal_qualification = REGEXP_REPLACE(appraisal_qualification, 'D\\.ED', 'DED', 'gi')
-      WHERE appraisal_qualification ~* 'D\\.ED'
-    `);
-    // Step 3: uppercase + trim everything
-    const result = await em.query(`
       UPDATE users
       SET appraisal_qualification = UPPER(TRIM(appraisal_qualification))
-      WHERE appraisal_qualification IS NOT NULL
-        AND TRIM(appraisal_qualification) != ''
+      WHERE appraisal_qualification IS NOT NULL AND TRIM(appraisal_qualification) != ''
     `);
-    const updated = Array.isArray(result) ? (result[1] ?? 0) : (result?.affected ?? 0);
-    return { updated, message: `Qualifications normalized: B.ED→BED, D.ED→DED, all uppercased (${updated} rows updated)` };
+
+    // Step 2: map all variants to the 9 canonical names (no dots, uppercase)
+    const mappings: [string, string[]][] = [
+      ['POST GRADUATION WITH BED', [
+        'POST GRADUATION WITH B.ED', 'POST GRADUATION WITH B ED',
+        'POSTGRADUATION WITH BED', 'POSTGRADUATION WITH B.ED',
+      ]],
+      ['GRADUATION WITH BED', [
+        'GRADUATION WITH B.ED', 'GRADUATION WITH B ED',
+        'GRAD WITH BED', 'GRAD WITH B.ED',
+      ]],
+      ['POST GRADUATION WITH DED', [
+        'POST GRADUATION WITH D.ED', 'POST GRADUATION WITH D ED',
+        'POSTGRADUATION WITH DED', 'POSTGRADUATION WITH D.ED',
+      ]],
+      ['GRADUATION WITH DED', [
+        'GRADUATION WITH D.ED', 'GRADUATION WITH D ED',
+      ]],
+      ['POST GRADUATION', ['POSTGRADUATION', 'POST-GRADUATION']],
+      ['GRADUATION', ['GRAD']],
+      ['DED', ['D.ED']],
+      ['NTT', []],
+      ['PTT', []],
+    ];
+
+    let totalUpdated = 0;
+    for (const [canonical, variants] of mappings) {
+      if (variants.length === 0) continue;
+      const placeholders = variants.map((_, i) => `$${i + 1}`).join(', ');
+      const result = await em.query(
+        `UPDATE users SET appraisal_qualification = '${canonical}' WHERE appraisal_qualification IN (${placeholders})`,
+        variants,
+      );
+      totalUpdated += Array.isArray(result) ? (result[1] ?? 0) : (result?.affected ?? 0);
+    }
+
+    return {
+      updated: totalUpdated,
+      message: `${totalUpdated} qualification(s) mapped to canonical names`,
+    };
   }
 
   async findOne(id: string) {
