@@ -55,15 +55,28 @@ export class UsersService {
   }
 
   async normalizeQualifications() {
-    const result = await this.userRepo.manager.query(`
+    const em = this.userRepo.manager;
+    // Step 1: collapse B.ED → BED (dots removed, case-insensitive)
+    await em.query(`
+      UPDATE users
+      SET appraisal_qualification = REGEXP_REPLACE(appraisal_qualification, 'B\\.ED', 'BED', 'gi')
+      WHERE appraisal_qualification ~* 'B\\.ED'
+    `);
+    // Step 2: collapse D.ED → DED
+    await em.query(`
+      UPDATE users
+      SET appraisal_qualification = REGEXP_REPLACE(appraisal_qualification, 'D\\.ED', 'DED', 'gi')
+      WHERE appraisal_qualification ~* 'D\\.ED'
+    `);
+    // Step 3: uppercase + trim everything
+    const result = await em.query(`
       UPDATE users
       SET appraisal_qualification = UPPER(TRIM(appraisal_qualification))
       WHERE appraisal_qualification IS NOT NULL
         AND TRIM(appraisal_qualification) != ''
-        AND appraisal_qualification != UPPER(TRIM(appraisal_qualification))
     `);
     const updated = Array.isArray(result) ? (result[1] ?? 0) : (result?.affected ?? 0);
-    return { updated, message: `${updated} qualification(s) normalized to uppercase` };
+    return { updated, message: `Qualifications normalized: B.ED→BED, D.ED→DED, all uppercased (${updated} rows updated)` };
   }
 
   async findOne(id: string) {
