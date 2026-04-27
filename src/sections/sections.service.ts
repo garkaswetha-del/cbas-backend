@@ -324,7 +324,7 @@ export class SectionsService {
 
   async getStudentCounts(academic_year: string) {
     const sections = await this.findAll(undefined, academic_year);
-    const result = [];
+    const result: any[] = [];
     for (const sec of sections) {
       const rows: { count: string }[] = await this.dataSource.query(
         `SELECT COUNT(*) as count FROM students WHERE current_class = $1 AND UPPER(section) = $2 AND is_active = true`,
