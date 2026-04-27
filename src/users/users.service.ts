@@ -41,14 +41,23 @@ export class UsersService {
   async getStats() {
     const total = await this.userRepo.count({ where: { is_active: true } });
     const inactive = await this.userRepo.count({ where: { is_active: false } });
-    // Group case-insensitively so "Graduation with BED" and "GRADUATION WITH BED" count as one
+    // Normalize on the fly: uppercase, trim, remove dots (B.ED→BED, D.ED→DED)
+    // so display is always correct regardless of what is stored in the DB
     const byQualification: { qualification: string; count: string }[] = await this.userRepo.manager.query(`
-      SELECT UPPER(TRIM(appraisal_qualification)) AS qualification, COUNT(*) AS count
-      FROM users
-      WHERE is_active = true
-        AND appraisal_qualification IS NOT NULL
-        AND TRIM(appraisal_qualification) != ''
-      GROUP BY UPPER(TRIM(appraisal_qualification))
+      SELECT canonical AS qualification, COUNT(*) AS count FROM (
+        SELECT REGEXP_REPLACE(
+                 REGEXP_REPLACE(
+                   UPPER(TRIM(appraisal_qualification)),
+                   'B\\.ED', 'BED', 'g'
+                 ),
+                 'D\\.ED', 'DED', 'g'
+               ) AS canonical
+        FROM users
+        WHERE is_active = true
+          AND appraisal_qualification IS NOT NULL
+          AND TRIM(appraisal_qualification) != ''
+      ) t
+      GROUP BY canonical
       ORDER BY count DESC
     `);
     return { total, inactive, byQualification };
