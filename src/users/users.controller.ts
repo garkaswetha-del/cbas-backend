@@ -31,6 +31,11 @@ export class UsersController {
     return this.usersService.findAll({ role, subject, grade, qualification });
   }
 
+  @Post('normalize-qualifications')
+  normalizeQualifications() {
+    return this.usersService.normalizeQualifications();
+  }
+
   @Post('login')
   login(@Body() body: { email: string; password: string }) {
     return this.usersService.login(body.email, body.password);

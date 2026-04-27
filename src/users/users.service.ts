@@ -19,7 +19,7 @@ export class UsersService {
       query.andWhere('user.role = :role', { role: filters.role });
     }
     if (filters?.qualification) {
-      query.andWhere('user.appraisal_qualification = :q', { q: filters.qualification });
+      query.andWhere('UPPER(TRIM(user.appraisal_qualification)) = :q', { q: filters.qualification.trim().toUpperCase() });
     }
     if (filters?.subject) {
       query.andWhere('user.subjects LIKE :subject', { subject: `%${filters.subject}%` });
@@ -41,16 +41,29 @@ export class UsersService {
   async getStats() {
     const total = await this.userRepo.count({ where: { is_active: true } });
     const inactive = await this.userRepo.count({ where: { is_active: false } });
-    const byQualification = await this.userRepo
-      .createQueryBuilder('user')
-      .select('user.appraisal_qualification', 'qualification')
-      .addSelect('COUNT(*)', 'count')
-      .where('user.is_active = true')
-      .andWhere('user.appraisal_qualification IS NOT NULL')
-      .groupBy('user.appraisal_qualification')
-      .getRawMany();
-
+    // Group case-insensitively so "Graduation with BED" and "GRADUATION WITH BED" count as one
+    const byQualification: { qualification: string; count: string }[] = await this.userRepo.manager.query(`
+      SELECT UPPER(TRIM(appraisal_qualification)) AS qualification, COUNT(*) AS count
+      FROM users
+      WHERE is_active = true
+        AND appraisal_qualification IS NOT NULL
+        AND TRIM(appraisal_qualification) != ''
+      GROUP BY UPPER(TRIM(appraisal_qualification))
+      ORDER BY count DESC
+    `);
     return { total, inactive, byQualification };
+  }
+
+  async normalizeQualifications() {
+    const result = await this.userRepo.manager.query(`
+      UPDATE users
+      SET appraisal_qualification = UPPER(TRIM(appraisal_qualification))
+      WHERE appraisal_qualification IS NOT NULL
+        AND TRIM(appraisal_qualification) != ''
+        AND appraisal_qualification != UPPER(TRIM(appraisal_qualification))
+    `);
+    const updated = Array.isArray(result) ? (result[1] ?? 0) : (result?.affected ?? 0);
+    return { updated, message: `${updated} qualification(s) normalized to uppercase` };
   }
 
   async findOne(id: string) {
@@ -116,7 +129,7 @@ export class UsersService {
       photo: data.photo,
       phone: data.phone,
       qualification: data.qualification,
-      appraisal_qualification: data.appraisal_qualification,
+      appraisal_qualification: data.appraisal_qualification ? data.appraisal_qualification.trim().toUpperCase() : undefined,
       experience: data.experience,
       credentials_shared: false,
     });
@@ -137,6 +150,7 @@ export class UsersService {
     if (data.subjects && !Array.isArray(data.subjects)) data.subjects = [data.subjects];
     if (data.assigned_classes && !Array.isArray(data.assigned_classes)) data.assigned_classes = [data.assigned_classes];
     if (data.assigned_sections && !Array.isArray(data.assigned_sections)) data.assigned_sections = [data.assigned_sections];
+    if (data.appraisal_qualification) data.appraisal_qualification = data.appraisal_qualification.trim().toUpperCase();
 
     await this.userRepo.update(id, data);
     return this.findOne(id);
