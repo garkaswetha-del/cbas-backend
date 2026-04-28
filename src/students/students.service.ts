@@ -66,12 +66,23 @@ export class StudentsService {
         COALESCE(NULLIF(TRIM(s.mother_qualification),''),'Not Specified') AS mother_qualification,
         COALESCE(NULLIF(TRIM(s.father_working_status),''),'Not Specified') AS father_working_status,
         COALESCE(NULLIF(TRIM(s.mother_working_status),''),'Not Specified') AS mother_working_status,
-        COUNT(DISTINCT s.id) AS student_count,
-        ROUND(CAST(AVG(ba.overall_score) AS numeric), 1) AS avg_baseline,
-        ROUND(CAST(AVG(em.percentage) AS numeric), 1) AS avg_exam
+        COUNT(s.id) AS student_count,
+        ROUND(CAST(AVG(b.avg_baseline) AS numeric), 1) AS avg_baseline,
+        ROUND(CAST(AVG(e.avg_exam) AS numeric), 1) AS avg_exam,
+        ROUND(CAST(AVG(a.avg_activity) AS numeric), 1) AS avg_activity
       FROM students s
-      LEFT JOIN baseline_assessments ba ON ba.entity_id = s.id::text AND ba.entity_type::text = 'student'
-      LEFT JOIN exam_marks em ON em.student_id = s.id::text AND em.is_active = true
+      LEFT JOIN (
+        SELECT entity_id, AVG(overall_score) AS avg_baseline
+        FROM baseline_assessments WHERE entity_type::text = 'student' GROUP BY entity_id
+      ) b ON b.entity_id = s.id::text
+      LEFT JOIN (
+        SELECT student_id, AVG(percentage) AS avg_exam
+        FROM exam_marks WHERE is_active = true GROUP BY student_id
+      ) e ON e.student_id = s.id::text
+      LEFT JOIN (
+        SELECT student_id, AVG(percentage) AS avg_activity
+        FROM activity_assessments WHERE is_active = true GROUP BY student_id
+      ) a ON a.student_id = s.id::text
       WHERE ${where}
       GROUP BY 1,2,3,4
       ORDER BY student_count DESC
@@ -127,9 +138,9 @@ export class StudentsService {
     return { updated, skipped, errors };
   }
 
-  // Bulk import students
+  // Bulk import students — upsert: create new, update parent+info fields on existing
   async bulkImport(students: Partial<Student>[]) {
-    const results = { success: 0, failed: 0, errors: [] as string[] };
+    const results = { created: 0, updated: 0, errors: [] as string[] };
     for (const s of students) {
       try {
         const existing = await this.studentRepo.findOne({
@@ -137,13 +148,20 @@ export class StudentsService {
         });
         if (!existing) {
           await this.studentRepo.save(this.studentRepo.create(s));
-          results.success++;
+          results.created++;
         } else {
-          results.failed++;
-          results.errors.push(`${s.name} already exists`);
+          const patch: Partial<Student> = {};
+          const fields: (keyof Student)[] = [
+            'admission_no', 'gender', 'phone', 'dob', 'admission_year',
+            'father_name', 'mother_name', 'parent_phone', 'address',
+            'father_qualification', 'mother_qualification',
+            'father_working_status', 'mother_working_status',
+          ];
+          for (const f of fields) { if (s[f]) (patch as any)[f] = s[f]; }
+          if (Object.keys(patch).length > 0) await this.studentRepo.update(existing.id, patch);
+          results.updated++;
         }
       } catch (e) {
-        results.failed++;
         results.errors.push(`${s.name}: ${e.message}`);
       }
     }
