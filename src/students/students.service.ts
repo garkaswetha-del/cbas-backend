@@ -51,6 +51,82 @@ export class StudentsService {
     return this.studentRepo.save(student);
   }
 
+  async getParentAnalytics(filters?: { grade?: string; section?: string }) {
+    const em = this.studentRepo.manager;
+    const conditions: string[] = ['s.is_active = true'];
+    const params: any[] = [];
+    let idx = 1;
+    if (filters?.grade) { conditions.push(`LOWER(s.current_class) = LOWER($${idx++})`); params.push(filters.grade); }
+    if (filters?.section) { conditions.push(`UPPER(s.section) = UPPER($${idx++})`); params.push(filters.section); }
+    const where = conditions.join(' AND ');
+
+    const profiles: any[] = await em.query(`
+      SELECT
+        COALESCE(NULLIF(TRIM(s.father_qualification),''),'Not Specified') AS father_qualification,
+        COALESCE(NULLIF(TRIM(s.mother_qualification),''),'Not Specified') AS mother_qualification,
+        COALESCE(NULLIF(TRIM(s.father_working_status),''),'Not Specified') AS father_working_status,
+        COALESCE(NULLIF(TRIM(s.mother_working_status),''),'Not Specified') AS mother_working_status,
+        COUNT(DISTINCT s.id) AS student_count,
+        ROUND(AVG(ba.overall_score)::numeric, 1) AS avg_baseline,
+        ROUND(AVG(em.percentage)::numeric, 1) AS avg_exam
+      FROM students s
+      LEFT JOIN baseline_assessments ba ON ba.entity_id = s.id AND ba.entity_type = 'student'
+      LEFT JOIN exam_marks em ON em.student_id = s.id AND em.is_active = true
+      WHERE ${where}
+      GROUP BY 1,2,3,4
+      ORDER BY student_count DESC
+    `, params);
+
+    const [summary]: any[] = await em.query(`
+      SELECT
+        COUNT(*) FILTER (WHERE father_qualification = 'Graduate' AND mother_qualification = 'Graduate') AS both_graduate,
+        COUNT(*) FILTER (WHERE father_qualification = 'Graduate' AND (mother_qualification != 'Graduate' OR mother_qualification IS NULL OR TRIM(mother_qualification) = '')) AS only_father_graduate,
+        COUNT(*) FILTER (WHERE mother_qualification = 'Graduate' AND (father_qualification != 'Graduate' OR father_qualification IS NULL OR TRIM(father_qualification) = '')) AS only_mother_graduate,
+        COUNT(*) FILTER (WHERE (father_qualification IS NULL OR TRIM(father_qualification) = '' OR father_qualification = 'Non-Graduate') AND (mother_qualification IS NULL OR TRIM(mother_qualification) = '' OR mother_qualification = 'Non-Graduate')) AS neither_graduate,
+        COUNT(*) FILTER (WHERE father_working_status = 'Working' AND mother_working_status = 'Working') AS both_working,
+        COUNT(*) FILTER (WHERE (father_qualification IS NULL OR TRIM(father_qualification) = '') OR (mother_qualification IS NULL OR TRIM(mother_qualification) = '')) AS missing_data,
+        COUNT(*) AS total
+      FROM students WHERE ${where}
+    `, params);
+
+    return { profiles, summary };
+  }
+
+  async bulkUpdateParentData(records: Array<{
+    admission_no?: string;
+    name?: string;
+    grade?: string;
+    father_qualification?: string;
+    mother_qualification?: string;
+    father_working_status?: string;
+    mother_working_status?: string;
+  }>) {
+    let updated = 0, skipped = 0;
+    const errors: string[] = [];
+    for (const r of records) {
+      try {
+        let student: Student | null = null;
+        if (r.admission_no?.trim()) {
+          student = await this.studentRepo.findOne({ where: { admission_no: r.admission_no.trim(), is_active: true } });
+        }
+        if (!student && r.name?.trim() && r.grade?.trim()) {
+          student = await this.studentRepo.findOne({ where: { name: r.name.trim(), current_class: r.grade.trim(), is_active: true } });
+        }
+        if (!student) { skipped++; errors.push(`Not found: ${r.admission_no || r.name || 'unknown'}`); continue; }
+        const patch: Partial<Student> = {};
+        if (r.father_qualification) patch.father_qualification = r.father_qualification;
+        if (r.mother_qualification) patch.mother_qualification = r.mother_qualification;
+        if (r.father_working_status) patch.father_working_status = r.father_working_status;
+        if (r.mother_working_status) patch.mother_working_status = r.mother_working_status;
+        await this.studentRepo.update(student.id, patch);
+        updated++;
+      } catch (e: any) {
+        skipped++; errors.push(`Error ${r.admission_no || r.name}: ${e.message}`);
+      }
+    }
+    return { updated, skipped, errors };
+  }
+
   // Bulk import students
   async bulkImport(students: Partial<Student>[]) {
     const results = { success: 0, failed: 0, errors: [] as string[] };

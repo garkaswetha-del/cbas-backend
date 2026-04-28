@@ -86,6 +86,19 @@ export class StudentsController {
     return this.studentsService.getAlumni(graduation_year);
   }
 
+  @Get('parent-analytics')
+  getParentAnalytics(
+    @Query('grade') grade?: string,
+    @Query('section') section?: string,
+  ) {
+    return this.studentsService.getParentAnalytics({ grade, section });
+  }
+
+  @Post('parent-bulk-update')
+  bulkUpdateParentData(@Body() body: { records: any[] }) {
+    return this.studentsService.bulkUpdateParentData(body.records);
+  }
+
   @Post('bulk-import')
   bulkImport(@Body() body: { students: any[] }) {
     return this.studentsService.bulkImport(body.students);
