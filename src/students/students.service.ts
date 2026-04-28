@@ -67,10 +67,10 @@ export class StudentsService {
         COALESCE(NULLIF(TRIM(s.father_working_status),''),'Not Specified') AS father_working_status,
         COALESCE(NULLIF(TRIM(s.mother_working_status),''),'Not Specified') AS mother_working_status,
         COUNT(DISTINCT s.id) AS student_count,
-        ROUND(AVG(ba.overall_score)::numeric, 1) AS avg_baseline,
-        ROUND(AVG(em.percentage)::numeric, 1) AS avg_exam
+        ROUND(CAST(AVG(ba.overall_score) AS numeric), 1) AS avg_baseline,
+        ROUND(CAST(AVG(em.percentage) AS numeric), 1) AS avg_exam
       FROM students s
-      LEFT JOIN baseline_assessments ba ON ba.entity_id = s.id AND ba.entity_type = 'student'
+      LEFT JOIN baseline_assessments ba ON ba.entity_id = s.id AND ba.entity_type::text = 'student'
       LEFT JOIN exam_marks em ON em.student_id = s.id AND em.is_active = true
       WHERE ${where}
       GROUP BY 1,2,3,4
