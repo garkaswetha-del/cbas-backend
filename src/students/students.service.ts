@@ -70,8 +70,8 @@ export class StudentsService {
         ROUND(CAST(AVG(ba.overall_score) AS numeric), 1) AS avg_baseline,
         ROUND(CAST(AVG(em.percentage) AS numeric), 1) AS avg_exam
       FROM students s
-      LEFT JOIN baseline_assessments ba ON ba.entity_id = s.id AND ba.entity_type::text = 'student'
-      LEFT JOIN exam_marks em ON em.student_id = s.id AND em.is_active = true
+      LEFT JOIN baseline_assessments ba ON ba.entity_id = s.id::text AND ba.entity_type::text = 'student'
+      LEFT JOIN exam_marks em ON em.student_id = s.id::text AND em.is_active = true
       WHERE ${where}
       GROUP BY 1,2,3,4
       ORDER BY student_count DESC
