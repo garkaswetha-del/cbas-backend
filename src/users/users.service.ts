@@ -41,16 +41,15 @@ export class UsersService {
   async getStats() {
     const total = await this.userRepo.count({ where: { is_active: true } });
     const inactive = await this.userRepo.count({ where: { is_active: false } });
-    // Normalize on the fly: uppercase, trim, remove dots (B.ED→BED, D.ED→DED)
-    // so display is always correct regardless of what is stored in the DB
+    // Use REPLACE (not regex) — dot is treated as a literal character, no escaping issues
     const byQualification: { qualification: string; count: string }[] = await this.userRepo.manager.query(`
       SELECT canonical AS qualification, COUNT(*) AS count FROM (
-        SELECT REGEXP_REPLACE(
-                 REGEXP_REPLACE(
+        SELECT REPLACE(
+                 REPLACE(
                    UPPER(TRIM(appraisal_qualification)),
-                   'B\\.ED', 'BED', 'g'
+                   'B.ED', 'BED'
                  ),
-                 'D\\.ED', 'DED', 'g'
+                 'D.ED', 'DED'
                ) AS canonical
         FROM users
         WHERE is_active = true
@@ -66,51 +65,26 @@ export class UsersService {
   async normalizeQualifications() {
     const em = this.userRepo.manager;
 
-    // Step 1: uppercase + trim everything first
-    await em.query(`
+    // Single UPDATE: uppercase + trim + replace literal dots using REPLACE()
+    // REPLACE treats '.' as a literal character — no regex, no escaping issues
+    const result = await em.query(`
       UPDATE users
-      SET appraisal_qualification = UPPER(TRIM(appraisal_qualification))
-      WHERE appraisal_qualification IS NOT NULL AND TRIM(appraisal_qualification) != ''
+      SET appraisal_qualification =
+        REPLACE(
+          REPLACE(
+            UPPER(TRIM(appraisal_qualification)),
+            'B.ED', 'BED'
+          ),
+          'D.ED', 'DED'
+        )
+      WHERE appraisal_qualification IS NOT NULL
+        AND TRIM(appraisal_qualification) != ''
     `);
 
-    // Step 2: map all variants to the 9 canonical names (no dots, uppercase)
-    const mappings: [string, string[]][] = [
-      ['POST GRADUATION WITH BED', [
-        'POST GRADUATION WITH B.ED', 'POST GRADUATION WITH B ED',
-        'POSTGRADUATION WITH BED', 'POSTGRADUATION WITH B.ED',
-      ]],
-      ['GRADUATION WITH BED', [
-        'GRADUATION WITH B.ED', 'GRADUATION WITH B ED',
-        'GRAD WITH BED', 'GRAD WITH B.ED',
-      ]],
-      ['POST GRADUATION WITH DED', [
-        'POST GRADUATION WITH D.ED', 'POST GRADUATION WITH D ED',
-        'POSTGRADUATION WITH DED', 'POSTGRADUATION WITH D.ED',
-      ]],
-      ['GRADUATION WITH DED', [
-        'GRADUATION WITH D.ED', 'GRADUATION WITH D ED',
-      ]],
-      ['POST GRADUATION', ['POSTGRADUATION', 'POST-GRADUATION']],
-      ['GRADUATION', ['GRAD']],
-      ['DED', ['D.ED']],
-      ['NTT', []],
-      ['PTT', []],
-    ];
-
-    let totalUpdated = 0;
-    for (const [canonical, variants] of mappings) {
-      if (variants.length === 0) continue;
-      const placeholders = variants.map((_, i) => `$${i + 1}`).join(', ');
-      const result = await em.query(
-        `UPDATE users SET appraisal_qualification = '${canonical}' WHERE appraisal_qualification IN (${placeholders})`,
-        variants,
-      );
-      totalUpdated += Array.isArray(result) ? (result[1] ?? 0) : (result?.affected ?? 0);
-    }
-
+    const updated = Array.isArray(result) ? (result[1] ?? 0) : (result?.affected ?? 0);
     return {
-      updated: totalUpdated,
-      message: `${totalUpdated} qualification(s) mapped to canonical names`,
+      updated,
+      message: `${updated} qualification(s) updated — all uppercased, B.ED→BED, D.ED→DED`,
     };
   }
 
