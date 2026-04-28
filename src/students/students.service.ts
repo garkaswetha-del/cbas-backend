@@ -86,7 +86,7 @@ export class StudentsService {
         COUNT(*) FILTER (WHERE father_working_status = 'Working' AND mother_working_status = 'Working') AS both_working,
         COUNT(*) FILTER (WHERE (father_qualification IS NULL OR TRIM(father_qualification) = '') OR (mother_qualification IS NULL OR TRIM(mother_qualification) = '')) AS missing_data,
         COUNT(*) AS total
-      FROM students WHERE ${where}
+      FROM students s WHERE ${where}
     `, params);
 
     return { profiles, summary };
