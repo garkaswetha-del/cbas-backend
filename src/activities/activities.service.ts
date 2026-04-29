@@ -204,7 +204,7 @@ export class ActivitiesService {
   }) {
     const query = this.activityRepo.createQueryBuilder('a').where('a.is_active = true');
     if (filters.grade) query.andWhere('a.grade = :grade', { grade: filters.grade });
-    if (filters.section) query.andWhere('a.section = :section', { section: filters.section });
+    if (filters.section) query.andWhere('LOWER(a.section) = LOWER(:section)', { section: filters.section });
     if (filters.subject) query.andWhere('a.subject = :subject', { subject: normalizeSubject(filters.subject) });
     if (filters.academic_year) query.andWhere('a.academic_year = :ay', { ay: filters.academic_year });
     if (filters.stage) query.andWhere('a.stage = :stage', { stage: filters.stage });
@@ -959,9 +959,12 @@ export class ActivitiesService {
 
   // ── CONSECUTIVE DECLINE ───────────────────────────────────────
 
-  async getConsecutiveDeclineStudents(academic_year: string) {
+  async getConsecutiveDeclineStudents(academic_year: string, grade?: string, section?: string) {
+    const where: any = { academic_year, is_active: true };
+    if (grade) where.grade = grade;
+    if (section) where.section = section;
     const activities = await this.activityRepo.find({
-      where: { academic_year, is_active: true },
+      where,
       order: { activity_date: 'ASC', created_at: 'ASC' },
     });
     if (activities.length < 3) return [];

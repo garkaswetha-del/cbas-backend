@@ -209,8 +209,12 @@ export class ActivitiesController {
   // ── ALERTS ───────────────────────────────────────────────────
 
   @Get('alerts/decline')
-  getConsecutiveDecline(@Query('academic_year') academic_year: string) {
-    return this.activitiesService.getConsecutiveDeclineStudents(academic_year || '2025-26');
+  getConsecutiveDecline(
+    @Query('academic_year') academic_year: string,
+    @Query('grade') grade?: string,
+    @Query('section') section?: string,
+  ) {
+    return this.activitiesService.getConsecutiveDeclineStudents(academic_year || '2025-26', grade, section);
   }
 
   // ── LONGITUDINAL ACROSS ALL GRADES ───────────────────────────
