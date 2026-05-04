@@ -221,6 +221,18 @@ export class TeacherAppraisal {
   @Column({ type: 'text', nullable: true }) obs_0_comment: string;
   @Column({ type: 'text', nullable: true }) english_comm_band_comment: string;
 
+  // SECTION-LEVEL PRINCIPAL COMMENTS — one per section, shown in teacher's appraisal report
+  @Column({ type: 'text', nullable: true }) literacy_section_comment: string;
+  @Column({ type: 'text', nullable: true }) numeracy_section_comment: string;
+  @Column({ type: 'text', nullable: true }) exam_section_comment: string;
+  @Column({ type: 'text', nullable: true }) skills_section_comment: string;
+  @Column({ type: 'text', nullable: true }) behaviour_section_comment: string;
+  @Column({ type: 'text', nullable: true }) parents_feedback_section_comment: string;
+  @Column({ type: 'text', nullable: true }) classroom_section_comment: string;
+  @Column({ type: 'text', nullable: true }) english_comm_section_comment: string;
+  @Column({ type: 'text', nullable: true }) responsibilities_section_comment: string;
+  @Column({ type: 'text', nullable: true }) overall_remarks: string;
+
   @CreateDateColumn()
   created_at: Date;
 
