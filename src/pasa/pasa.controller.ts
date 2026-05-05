@@ -189,4 +189,12 @@ export class PasaController {
   clearAllData() {
     return this.pasaService.clearAllPasaData();
   }
+
+  @Delete('marks/student/:student_id')
+  clearStudentMarks(
+    @Param('student_id') student_id: string,
+    @Query('academic_year') academic_year: string,
+  ) {
+    return this.pasaService.clearStudentMarks(student_id, academic_year || '2025-26');
+  }
 }

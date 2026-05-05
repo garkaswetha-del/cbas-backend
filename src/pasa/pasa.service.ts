@@ -502,6 +502,11 @@ export class PasaService {
     return { success: true, message: 'All PASA data cleared' };
   }
 
+  async clearStudentMarks(student_id: string, academic_year: string) {
+    await this.marksRepo.delete({ student_id, academic_year });
+    return { success: true, message: `PASA marks cleared for student ${student_id}` };
+  }
+
   // ── STUDENT ANALYSIS (all exams, all subjects, competency detail) ────
   async getStudentAnalysis(student_id: string, academic_year: string) {
     const allMarks = await this.marksRepo.find({
