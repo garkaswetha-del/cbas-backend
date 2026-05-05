@@ -506,7 +506,7 @@ export class PasaService {
   async getStudentAnalysis(student_id: string, academic_year: string) {
     const allMarks = await this.marksRepo.find({
       where: { student_id, academic_year, is_active: true },
-      order: { exam_type: 'ASC' },
+      order: { exam_type: 'ASC', updated_at: 'DESC' },
     });
     if (!allMarks.length) return null;
 
@@ -519,11 +519,18 @@ export class PasaService {
     const subjects = [...new Set(allMarks.map(m => m.subject))].sort();
 
     const examSummary = examTypes.map(exam => {
+      // When multiple records exist for the same (exam_type, subject) keep only the most recent
       const examMarks = allMarks.filter(m => m.exam_type === exam);
+      const latestBySubject: Map<string, typeof examMarks[0]> = new Map();
+      examMarks.forEach(m => {
+        const prev = latestBySubject.get(m.subject);
+        if (!prev || m.updated_at > prev.updated_at) latestBySubject.set(m.subject, m);
+      });
+      const deduped = Array.from(latestBySubject.values());
       const subjectData: Record<string, any> = {};
       let to = 0, tm = 0;
       subjects.forEach(sub => {
-        const m = examMarks.find(x => x.subject === sub);
+        const m = deduped.find(x => x.subject === sub);
         subjectData[sub] = {
           total_obtained: m ? safeNum(m.total_obtained) : null,
           total_max: m ? safeNum(m.total_max) : null,
@@ -543,10 +550,11 @@ export class PasaService {
       return { exam, subjects: subjectData, total_obtained: to, total_max: tm, grand_percentage: grand_pct, band };
     });
 
-    // Subject trend across exams
+    // Subject trend across exams — use latest record per (exam_type, subject)
     const subjectTrend = subjects.map(sub => {
       const points = examTypes.map(exam => {
-        const m = allMarks.find(x => x.exam_type === exam && x.subject === sub);
+        const candidates = allMarks.filter(x => x.exam_type === exam && x.subject === sub);
+        const m = candidates.sort((a, b) => b.updated_at.getTime() - a.updated_at.getTime())[0];
         return { exam, percentage: m ? safeNum(m.percentage) : null, is_absent: m?.is_absent || false };
       });
       return { subject: sub, trend: points };
