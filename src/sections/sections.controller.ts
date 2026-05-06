@@ -1,4 +1,4 @@
-import { Controller, Get, Post, Patch, Delete, Body, Param, Query } from '@nestjs/common';
+import { Controller, Get, Post, Patch, Delete, Body, Param, Query, InternalServerErrorException } from '@nestjs/common';
 import { SectionsService } from './sections.service';
 
 @Controller('sections')
@@ -52,8 +52,12 @@ export class SectionsController {
 
   /** PATCH /sections/:id/rename */
   @Patch(':id/rename')
-  rename(@Param('id') id: string, @Body() body: { name: string }) {
-    return this.sectionsService.rename(id, body.name);
+  async rename(@Param('id') id: string, @Body() body: { name: string }) {
+    try {
+      return await this.sectionsService.rename(id, body.name);
+    } catch (e: any) {
+      throw new InternalServerErrorException(e?.message || 'Rename failed');
+    }
   }
 
   /** PATCH /sections/:id/deactivate */
