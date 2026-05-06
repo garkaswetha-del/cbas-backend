@@ -47,39 +47,37 @@ import { BaselineConfigV2 } from './baseline/entities/baseline-config-v2.entity'
     ConfigModule.forRoot({ isGlobal: true }),
     TypeOrmModule.forRootAsync({
       imports: [ConfigModule],
-      useFactory: (config: ConfigService) => ({
-        type: 'postgres',
-        host: config.get('DB_HOST'),
-        port: +(config.get<number>('DB_PORT') ?? 5432),
-        username: config.get('DB_USERNAME'),
-        password: config.get('DB_PASSWORD'),
-        database: config.get('DB_NAME'),
-        entities: [
-          Student,
-          User,
-          Assessment,
-          CompetencyScore,
-          AiOutput,
-          CompetencyDefinition,
-          TeacherAppraisal,
-          CompetencyFramework,
-          BaselineAssessment,
-          LearningLink,
-          Activity,
-          ActivityAssessment,
-          StudentCompetencyScore,
-          TeacherObservation,
-          ExamConfig,
-          ExamMarks,
-          TeacherMapping,
-          HomeworkRecord,
-          TeacherAssignment,
-          Section,
-          BaselineConfigV2,
-        ],
-        synchronize: true,
-        logging: true,
-      }),
+      useFactory: (config: ConfigService) => {
+        const databaseUrl = config.get<string>('DATABASE_URL');
+        const entities = [
+          Student, User, Assessment, CompetencyScore, AiOutput,
+          CompetencyDefinition, TeacherAppraisal, CompetencyFramework,
+          BaselineAssessment, LearningLink, Activity, ActivityAssessment,
+          StudentCompetencyScore, TeacherObservation, ExamConfig, ExamMarks,
+          TeacherMapping, HomeworkRecord, TeacherAssignment, Section, BaselineConfigV2,
+        ];
+        if (databaseUrl) {
+          return {
+            type: 'postgres' as const,
+            url: databaseUrl,
+            ssl: { rejectUnauthorized: false },
+            entities,
+            synchronize: true,
+            logging: false,
+          };
+        }
+        return {
+          type: 'postgres' as const,
+          host: config.get('DB_HOST'),
+          port: +(config.get<number>('DB_PORT') ?? 5432),
+          username: config.get('DB_USERNAME'),
+          password: config.get('DB_PASSWORD'),
+          database: config.get('DB_NAME'),
+          entities,
+          synchronize: true,
+          logging: false,
+        };
+      },
       inject: [ConfigService],
     }),
     AuthModule,
