@@ -186,10 +186,10 @@ export class SectionsService {
         [normalized, oldName, grade],
       );
 
-      // 7. teacher_appraisals
+      // 7. teacher_appraisals (no grade column — filter by section only)
       updated.teacher_appraisals = await run(
-        `UPDATE teacher_appraisals SET section = $1 WHERE UPPER(section) = $2 AND grade = $3`,
-        [normalized, oldName, grade],
+        `UPDATE teacher_appraisals SET section = $1 WHERE UPPER(section) = $2`,
+        [normalized, oldName],
       );
 
       // 8. baseline_assessments
@@ -307,7 +307,7 @@ export class SectionsService {
       safeQuery(`SELECT COUNT(*) as c FROM exam_marks WHERE grade=$1 AND UPPER(section)=$2`, [sec.grade, sec.name]),
       safeQuery(`SELECT COUNT(*) as c FROM activities WHERE grade=$1 AND UPPER(section)=$2`, [sec.grade, sec.name]),
       safeQuery(`SELECT COUNT(*) as c FROM teacher_mappings WHERE grade=$1 AND section=$2`, [sec.grade, sec.name]),
-      safeQuery(`SELECT COUNT(*) as c FROM teacher_appraisals WHERE grade=$1 AND UPPER(section)=$2`, [sec.grade, sec.name]),
+      safeQuery(`SELECT COUNT(*) as c FROM teacher_appraisals WHERE UPPER(section)=$1`, [sec.name]),
       safeQuery(`SELECT COUNT(*) as c FROM ai_homework_records WHERE grade=$1 AND UPPER(section)=$2`, [sec.grade, sec.name]),
       safeQuery(`SELECT COUNT(*) as c FROM teacher_observations WHERE grade_observed=$1 AND UPPER(section_observed)=$2`, [sec.grade, sec.name]),
     ]);
