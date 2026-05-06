@@ -1,6 +1,6 @@
 import { Module } from '@nestjs/common';
 import { ConfigModule, ConfigService } from '@nestjs/config';
-import { TypeOrmModule } from '@nestjs/typeorm';
+import { TypeOrmModule, TypeOrmModuleOptions } from '@nestjs/typeorm';
 import { Student } from './students/entities/student.entity/student.entity';
 import { User } from './users/entities/user.entity/user.entity';
 import { Assessment } from './assessments/entities/assessment.entity/assessment.entity';
@@ -47,7 +47,7 @@ import { BaselineConfigV2 } from './baseline/entities/baseline-config-v2.entity'
     ConfigModule.forRoot({ isGlobal: true }),
     TypeOrmModule.forRootAsync({
       imports: [ConfigModule],
-      useFactory: (config: ConfigService) => {
+      useFactory: (config: ConfigService): TypeOrmModuleOptions => {
         const databaseUrl = config.get<string>('DATABASE_URL');
         const entities = [
           Student, User, Assessment, CompetencyScore, AiOutput,
@@ -58,7 +58,7 @@ import { BaselineConfigV2 } from './baseline/entities/baseline-config-v2.entity'
         ];
         if (databaseUrl) {
           return {
-            type: 'postgres' as const,
+            type: 'postgres',
             url: databaseUrl,
             ssl: { rejectUnauthorized: false },
             entities,
@@ -67,12 +67,12 @@ import { BaselineConfigV2 } from './baseline/entities/baseline-config-v2.entity'
           };
         }
         return {
-          type: 'postgres' as const,
-          host: config.get('DB_HOST'),
-          port: +(config.get<number>('DB_PORT') ?? 5432),
-          username: config.get('DB_USERNAME'),
-          password: config.get('DB_PASSWORD'),
-          database: config.get('DB_NAME'),
+          type: 'postgres',
+          host: config.get<string>('DB_HOST'),
+          port: +(config.get<string>('DB_PORT') ?? 5432),
+          username: config.get<string>('DB_USERNAME'),
+          password: config.get<string>('DB_PASSWORD'),
+          database: config.get<string>('DB_NAME'),
           entities,
           synchronize: true,
           logging: false,
