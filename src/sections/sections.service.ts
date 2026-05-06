@@ -130,14 +130,14 @@ export class SectionsService {
     const updated: Record<string, number> = {};
 
     await this.dataSource.transaction(async (em) => {
-      // 1. Update section record itself
-      await em.update(Section, { id }, { name: normalized });
-
       // Helper: run raw UPDATE and capture affected rows
       const run = async (sql: string, params: any[]): Promise<number> => {
         const result = await em.query(sql, params);
         return Array.isArray(result) ? result[1] ?? 0 : result.affected ?? 0;
       };
+
+      // 1. Update section record itself (raw SQL to stay inside the transaction connection)
+      await em.query(`UPDATE sections SET name = $1, updated_at = NOW() WHERE id = $2`, [normalized, id]);
 
       // 2. students
       updated.students = await run(
@@ -198,60 +198,60 @@ export class SectionsService {
         [normalized, oldName, grade],
       );
 
-      // 9. baseline_configs_v2 (raw SQL table)
-      try {
-        updated.baseline_configs_v2 = await run(
-          `UPDATE baseline_configs_v2 SET section = $1 WHERE UPPER(section) = $2 AND grade = $3`,
-          [normalized, oldName, grade],
-        );
-      } catch {
-        updated.baseline_configs_v2 = 0;
-      }
-
-      // 10. exam_configs
+      // 9. exam_configs
       updated.exam_configs = await run(
         `UPDATE exam_configs SET section = $1 WHERE UPPER(section) = $2 AND grade = $3`,
         [normalized, oldName, grade],
       );
 
-      // 11. exam_marks
+      // 10. exam_marks
       updated.exam_marks = await run(
         `UPDATE exam_marks SET section = $1 WHERE UPPER(section) = $2 AND grade = $3`,
         [normalized, oldName, grade],
       );
 
-      // 12. activities (section stored as plain string, may contain comma-separated values)
+      // 11. activities
       updated.activities = await run(
         `UPDATE activities SET section = $1 WHERE UPPER(section) = $2 AND grade = $3`,
         [normalized, oldName, grade],
       );
 
-      // 13. activity_assessments
+      // 12. activity_assessments
       updated.activity_assessments = await run(
         `UPDATE activity_assessments SET section = $1 WHERE UPPER(section) = $2 AND grade = $3`,
         [normalized, oldName, grade],
       );
 
-      // 14. student_competency_scores
+      // 13. student_competency_scores
       updated.student_competency_scores = await run(
         `UPDATE student_competency_scores SET section = $1 WHERE UPPER(section) = $2 AND grade = $3`,
         [normalized, oldName, grade],
       );
 
-      // 15. ai_homework_records
+      // 14. ai_homework_records
       updated.ai_homework_records = await run(
         `UPDATE ai_homework_records SET section = $1 WHERE UPPER(section) = $2 AND grade = $3`,
         [normalized, oldName, grade],
       );
-
-      // 16. teacher_observations (section_observed added in Phase 8)
-      try {
-        updated.teacher_observations = await run(
-          `UPDATE teacher_observations SET section_observed = $1 WHERE UPPER(section_observed) = $2 AND grade_observed = $3`,
-          [normalized, oldName, grade],
-        );
-      } catch { updated.teacher_observations = 0; }
     });
+
+    // Optional tables that may not exist in all deployments — run OUTSIDE the main
+    // transaction so a missing table doesn't abort the whole rename.
+    try {
+      const r = await this.dataSource.query(
+        `UPDATE baseline_configs_v2 SET section = $1 WHERE UPPER(section) = $2 AND grade = $3`,
+        [normalized, oldName, grade],
+      );
+      updated.baseline_configs_v2 = Array.isArray(r) ? r[1] ?? 0 : r.affected ?? 0;
+    } catch { updated.baseline_configs_v2 = 0; }
+
+    try {
+      const r = await this.dataSource.query(
+        `UPDATE teacher_observations SET section_observed = $1 WHERE UPPER(section_observed) = $2 AND grade_observed = $3`,
+        [normalized, oldName, grade],
+      );
+      updated.teacher_observations = Array.isArray(r) ? r[1] ?? 0 : r.affected ?? 0;
+    } catch { updated.teacher_observations = 0; }
 
     return {
       message: `Renamed ${oldName} → ${normalized} in ${grade}`,
