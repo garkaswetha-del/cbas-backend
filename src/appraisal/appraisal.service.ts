@@ -37,21 +37,23 @@ export class AppraisalService {
       where: { teacher_id, academic_year: data.academic_year },
     });
 
-    const isNursery = !!(data as any).literacy_band || !!(data as any).numeracy_band;
-    const literacy_score = isNursery ? this.calculateLiteracyScore(data) : 0;
-    const numeracy_score = isNursery ? this.calculateNumeracyScore(data) : 0;
-    const exam_score = isNursery ? 0 : this.calculateExamScore(data);
-    const skills_score = this.calculateSkillsScore(data);
-    const behaviour_score = this.calculateBehaviourScore(data);
+    // Merge incoming data with existing record so partial saves don't wipe untouched fields
+    const merged: any = existing ? { ...existing, ...data } : { ...data };
+    const isNursery = !!merged.literacy_band || !!merged.numeracy_band;
+    const literacy_score = isNursery ? this.calculateLiteracyScore(merged) : 0;
+    const numeracy_score = isNursery ? this.calculateNumeracyScore(merged) : 0;
+    const exam_score = isNursery ? 0 : this.calculateExamScore(merged);
+    const skills_score = this.calculateSkillsScore(merged);
+    const behaviour_score = this.calculateBehaviourScore(merged);
     const parents_feedback_score = isNursery
-      ? this.calculateParentsFeedbackScore(data, 0.2)
-      : this.calculateParentsFeedbackScore(data, 0.1);
+      ? this.calculateParentsFeedbackScore(merged, 0.2)
+      : this.calculateParentsFeedbackScore(merged, 0.1);
     const classroom_score = isNursery
-      ? this.calculateClassroomScore(data, 0.2)
-      : this.calculateClassroomScore(data, 0.1);
+      ? this.calculateClassroomScore(merged, 0.2)
+      : this.calculateClassroomScore(merged, 0.1);
     const english_comm_score = isNursery
-      ? this.calculateEnglishCommScore(data, 0.2)
-      : this.calculateEnglishCommScore(data, 0.05);
+      ? this.calculateEnglishCommScore(merged, 0.2)
+      : this.calculateEnglishCommScore(merged, 0.05);
     const responsibilities_score = this.calculateResponsibilitiesScore(data);
     const overall_score = literacy_score + numeracy_score + exam_score + skills_score +
       behaviour_score + parents_feedback_score + classroom_score + english_comm_score + responsibilities_score;
