@@ -24,6 +24,11 @@ export class BaselineService {
   ) {}
 
 
+  async deleteSectionData(grade: string, section: string, academic_year: string) {
+    const result = await this.baselineRepo.delete({ grade, section, academic_year });
+    return { deleted: result.affected, grade, section, academic_year };
+  }
+
   private defaultConfig(academic_year: string, round: string, grade: string, section: string) {
     return { academic_year, round, grade, section, gap_threshold: 60, promotion_threshold: 80, is_locked: false };
   }

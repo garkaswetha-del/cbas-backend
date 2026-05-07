@@ -1,4 +1,4 @@
-import { Controller, Get, Post, Patch, Body, Param, Query } from '@nestjs/common';
+import { Controller, Get, Post, Patch, Delete, Body, Param, Query } from '@nestjs/common';
 import { BaselineService } from './baseline.service';
 
 @Controller('baseline')
@@ -108,6 +108,15 @@ export class BaselineController {
   @Post('recalculate')
   recalculateAll() {
     return this.baselineService.recalculateAll();
+  }
+
+  @Delete('section')
+  deleteSectionData(
+    @Query('grade') grade: string,
+    @Query('section') section: string,
+    @Query('academic_year') academic_year: string,
+  ) {
+    return this.baselineService.deleteSectionData(grade, section, academic_year);
   }
 
   // ── Config: thresholds + lock, per year/round/grade/section ──────
