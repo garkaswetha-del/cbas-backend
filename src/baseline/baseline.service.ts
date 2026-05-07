@@ -6,6 +6,7 @@ import { Student } from '../students/entities/student.entity/student.entity';
 import { User } from '../users/entities/user.entity/user.entity';
 import { SectionsService } from '../sections/sections.service';
 import { BaselineConfigV2 } from './entities/baseline-config-v2.entity';
+import { BaselineParticipation } from './entities/baseline-participation.entity';
 
 @Injectable()
 export class BaselineService {
@@ -18,11 +19,28 @@ export class BaselineService {
     private userRepo: Repository<User>,
     @InjectRepository(BaselineConfigV2)
     private configRepo: Repository<BaselineConfigV2>,
+    @InjectRepository(BaselineParticipation)
+    private participationRepo: Repository<BaselineParticipation>,
     @InjectDataSource()
     private dataSource: DataSource,
     private sectionsService: SectionsService,
   ) {}
 
+
+  async getParticipation(academic_year: string) {
+    const rec = await this.participationRepo.findOne({ where: { academic_year } });
+    return rec ?? { academic_year, participating_grades: [] };
+  }
+
+  async setParticipation(academic_year: string, participating_grades: string[]) {
+    const existing = await this.participationRepo.findOne({ where: { academic_year } });
+    if (existing) {
+      await this.participationRepo.update(existing.id, { participating_grades });
+      return this.participationRepo.findOne({ where: { academic_year } });
+    }
+    const rec = this.participationRepo.create({ academic_year, participating_grades });
+    return this.participationRepo.save(rec);
+  }
 
   async deleteSectionData(grade: string, section: string, academic_year: string) {
     const result = await this.baselineRepo.delete({ grade, section, academic_year });
@@ -259,7 +277,15 @@ export class BaselineService {
       where: { academic_year, round: round as AssessmentRound, entity_type: EntityType.STUDENT },
     });
 
-    const totalStudents = await this.studentRepo.count({ where: { is_active: true } });
+    const participation = await this.participationRepo.findOne({ where: { academic_year } });
+    const participatingGrades = participation?.participating_grades ?? [];
+    let totalStudents: number;
+    if (participatingGrades.length > 0) {
+      const allStudents = await this.studentRepo.find({ where: { is_active: true } });
+      totalStudents = allStudents.filter(s => participatingGrades.includes(s.current_class)).length;
+    } else {
+      totalStudents = await this.studentRepo.count({ where: { is_active: true } });
+    }
     const assessed = assessments.length;
     const avg = (arr: number[]) => arr.length ? +(arr.reduce((a, b) => a + b, 0) / arr.length).toFixed(1) : 0;
 

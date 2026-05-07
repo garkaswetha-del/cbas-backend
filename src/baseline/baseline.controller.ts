@@ -110,6 +110,16 @@ export class BaselineController {
     return this.baselineService.recalculateAll();
   }
 
+  @Get('participation')
+  getParticipation(@Query('academic_year') academic_year: string) {
+    return this.baselineService.getParticipation(academic_year || '2025-26');
+  }
+
+  @Post('participation')
+  setParticipation(@Body() body: { academic_year: string; participating_grades: string[] }) {
+    return this.baselineService.setParticipation(body.academic_year, body.participating_grades);
+  }
+
   @Delete('section')
   deleteSectionData(
     @Query('grade') grade: string,
