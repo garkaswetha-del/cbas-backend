@@ -126,9 +126,12 @@ export class AppraisalService {
   }
 
   private calculateExamScore(data: Partial<TeacherAppraisal>): number {
-    const total = (+(data.pa1 ?? 0)) + (+(data.pa2 ?? 0)) + (+(data.pa3 ?? 0)) +
-      (+(data.pa4 ?? 0)) + (+(data.sa1 ?? 0)) + (+(data.sa2 ?? 0));
-    return (total / 600) * 0.5;
+    const conducted = [data.pa1, data.pa2, data.pa3, data.pa4, data.sa1, data.sa2]
+      .map(v => (v === null || v === undefined || v === '') ? null : +v)
+      .filter(v => v !== null && v > 0) as number[];
+    if (conducted.length === 0) return 0;
+    const total = conducted.reduce((sum, v) => sum + v, 0);
+    return (total / (conducted.length * 100)) * 0.5;
   }
 
   private calculateSkillsScore(data: Partial<TeacherAppraisal>): number {
