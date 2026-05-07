@@ -54,7 +54,7 @@ export class AppraisalService {
     const english_comm_score = isNursery
       ? this.calculateEnglishCommScore(merged, 0.2)
       : this.calculateEnglishCommScore(merged, 0.05);
-    const responsibilities_score = this.calculateResponsibilitiesScore(data);
+    const responsibilities_score = this.calculateResponsibilitiesScore(merged);
     const overall_score = literacy_score + numeracy_score + exam_score + skills_score +
       behaviour_score + parents_feedback_score + classroom_score + english_comm_score + responsibilities_score;
     const overall_percentage = overall_score * 100;
