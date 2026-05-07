@@ -177,7 +177,7 @@ export class AppraisalService {
     const map: Record<string, number> = {
       'BELOW 3:- 10%': 10, 'BELOW 5:- 8%': 8, 'BELOW 10:- 5%': 5, 'MORE THAN 10:- 2%': 2,
     };
-    return ((map[data.parents_feedback_band ?? ''] ?? 0) / 100) * weight;
+    return ((map[data.parents_feedback_band ?? ''] ?? 0) / 10) * weight;
   }
 
   private calculateClassroomScore(data: Partial<TeacherAppraisal>, weight = 0.1): number {
@@ -193,7 +193,7 @@ export class AppraisalService {
     const map: Record<string, number> = {
       'BELOW 3:- 10%': 10, 'BELOW 5:- 8%': 8, 'BELOW 10:- 5%': 5, 'MORE THAN 10:- 2%': 2,
     };
-    return ((map[data.english_comm_band ?? ''] ?? 0) / 100) * weight;
+    return ((map[data.english_comm_band ?? ''] ?? 0) / 10) * weight;
   }
 
   private calculateResponsibilitiesScore(data: Partial<TeacherAppraisal>): number {
