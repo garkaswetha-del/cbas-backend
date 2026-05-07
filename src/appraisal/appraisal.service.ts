@@ -127,8 +127,9 @@ export class AppraisalService {
 
   private calculateExamScore(data: Partial<TeacherAppraisal>): number {
     const conducted = [data.pa1, data.pa2, data.pa3, data.pa4, data.sa1, data.sa2]
-      .map(v => (v === null || v === undefined || v === '') ? null : +v)
-      .filter(v => v !== null && v > 0) as number[];
+      .filter(v => v !== null && v !== undefined)
+      .map(v => +v)
+      .filter(v => v > 0);
     if (conducted.length === 0) return 0;
     const total = conducted.reduce((sum, v) => sum + v, 0);
     return (total / (conducted.length * 100)) * 0.5;
