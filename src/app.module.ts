@@ -41,6 +41,7 @@ import { TeacherAssignmentsModule } from './teacher-assignments/teacher-assignme
 import { Section } from './sections/entities/section.entity';
 import { SectionsModule } from './sections/sections.module';
 import { BaselineConfigV2 } from './baseline/entities/baseline-config-v2.entity';
+import { BaselineParticipation } from './baseline/entities/baseline-participation.entity';
 
 @Module({
   imports: [
@@ -54,7 +55,7 @@ import { BaselineConfigV2 } from './baseline/entities/baseline-config-v2.entity'
           CompetencyDefinition, TeacherAppraisal, CompetencyFramework,
           BaselineAssessment, LearningLink, Activity, ActivityAssessment,
           StudentCompetencyScore, TeacherObservation, ExamConfig, ExamMarks,
-          TeacherMapping, HomeworkRecord, TeacherAssignment, Section, BaselineConfigV2,
+          TeacherMapping, HomeworkRecord, TeacherAssignment, Section, BaselineConfigV2, BaselineParticipation,
         ];
         if (databaseUrl) {
           return {
