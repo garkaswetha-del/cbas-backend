@@ -63,7 +63,9 @@ import { BaselineParticipation } from './baseline/entities/baseline-participatio
             url: databaseUrl,
             ssl: { rejectUnauthorized: false },
             entities,
-            synchronize: true,
+            synchronize: false,
+            migrationsRun: true,
+            migrations: [__dirname + '/../migrations/*.js'],
             logging: false,
           };
         }
@@ -75,7 +77,9 @@ import { BaselineParticipation } from './baseline/entities/baseline-participatio
           password: config.get<string>('DB_PASSWORD'),
           database: config.get<string>('DB_NAME'),
           entities,
-          synchronize: true,
+          synchronize: false,
+          migrationsRun: true,
+          migrations: [__dirname + '/../migrations/*.js'],
           logging: false,
         };
       },
