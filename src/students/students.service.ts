@@ -138,20 +138,43 @@ export class StudentsService {
     return { updated, skipped, errors };
   }
 
-  // Bulk import students — upsert: create new, update parent+info fields on existing
+  // Bulk import students — upsert: create new, update all fields on existing
+  // Lookup priority: admission_no → name+section → name+current_class+section
+  // current_class and section ARE updated (previously they were not, causing null current_class after re-import)
   async bulkImport(students: Partial<Student>[]) {
     const results = { created: 0, updated: 0, errors: [] as string[] };
     for (const s of students) {
       try {
-        const existing = await this.studentRepo.findOne({
-          where: { name: s.name, current_class: s.current_class, section: s.section }
-        });
+        let existing: Student | null = null;
+
+        // 1. Match by admission_no (most reliable)
+        if (s.admission_no?.trim()) {
+          existing = await this.studentRepo.findOne({
+            where: { admission_no: s.admission_no.trim(), is_active: true }
+          });
+        }
+
+        // 2. Fall back to name + section (handles case where current_class was previously null)
+        if (!existing && s.name?.trim() && s.section?.trim()) {
+          existing = await this.studentRepo.findOne({
+            where: { name: s.name.trim(), section: s.section.trim(), is_active: true }
+          });
+        }
+
+        // 3. Final fallback: name + current_class + section
+        if (!existing && s.name?.trim()) {
+          existing = await this.studentRepo.findOne({
+            where: { name: s.name.trim(), current_class: s.current_class, section: s.section }
+          });
+        }
+
         if (!existing) {
           await this.studentRepo.save(this.studentRepo.create(s));
           results.created++;
         } else {
           const patch: Partial<Student> = {};
           const fields: (keyof Student)[] = [
+            'current_class', 'section',
             'admission_no', 'gender', 'phone', 'dob', 'admission_year',
             'father_name', 'mother_name', 'parent_phone', 'address',
             'father_qualification', 'mother_qualification',
