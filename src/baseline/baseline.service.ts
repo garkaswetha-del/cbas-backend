@@ -451,7 +451,8 @@ export class BaselineService {
     const promoted_to_stage = promoted ? lit_promoted_to : null;
 
     // Store subject-wise promotion info in gaps field extension
-    const promotionInfo = { lit_promoted, num_promoted, lit_promoted_to, num_promoted_to, lit_stage, num_stage };
+    const subjects_assessed = data.subjects_assessed || 'both';
+    const promotionInfo = { lit_promoted, num_promoted, lit_promoted_to, num_promoted_to, lit_stage, num_stage, subjects_assessed };
 
     const existing = await this.baselineRepo.findOne({
       where: {
@@ -571,6 +572,34 @@ export class BaselineService {
       return { teacher_id: t.id, teacher_name: t.name, assessment: a || null };
     });
 
+    // Top 5 / Bottom 5 teachers by overall score
+    const sortedByOverall = assessed
+      .filter(t => t.overall !== null)
+      .sort((a, b) => (b.overall || 0) - (a.overall || 0));
+    const makeTeacher5 = (t: any) => ({
+      name: t.teacher.name,
+      literacy: t.litAvg !== null ? +t.litAvg.toFixed(1) : null,
+      numeracy: t.numAvg !== null ? +t.numAvg.toFixed(1) : null,
+      overall: +(t.overall || 0).toFixed(1),
+      level: t.level,
+      subjects_assessed: (t.gaps as any)?.subjects_assessed || 'both',
+    });
+    const top5 = sortedByOverall.slice(0, 5).map(makeTeacher5);
+    const bottom5 = [...sortedByOverall].reverse().slice(0, 5).map(makeTeacher5);
+
+    // Stage-wise breakdown
+    const stageMap: Record<string, number[]> = {};
+    assessed.forEach(t => {
+      const stage = ((t.gaps as any)?.lit_stage || (t.assessment as any)?.stage || 'foundation') as string;
+      if (!stageMap[stage]) stageMap[stage] = [];
+      if (t.overall !== null) stageMap[stage].push(t.overall as number);
+    });
+    const stageData = Object.entries(stageMap).map(([stage, avgs]) => ({
+      stage: stage.charAt(0).toUpperCase() + stage.slice(1),
+      avg: avg(avgs),
+      assessed: avgs.length,
+    }));
+
     // Stage progression across all rounds
     const allTeacherAssessments = await this.baselineRepo.find({
       where: { entity_type: EntityType.TEACHER, academic_year },
@@ -614,6 +643,9 @@ export class BaselineService {
       levelDist,
       teacherList,
       teacherStageProgression,
+      top5,
+      bottom5,
+      stageData,
     };
   }
 
