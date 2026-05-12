@@ -420,15 +420,28 @@ export class BaselineService {
 
   // ── Teacher baseline save ──────────────────────────────────────
   async saveTeacherBaseline(data: any) {
-    const { literacy_pct, numeracy_pct, literacy_total, numeracy_total, overall_score } =
+    const subjects_assessed: 'literacy' | 'numeracy' | 'both' = data.subjects_assessed || 'both';
+
+    const { literacy_pct: rawLitPct, numeracy_pct: rawNumPct, literacy_total: rawLitTotal, numeracy_total: rawNumTotal } =
       this.calculateTotals(data.literacy_scores || {}, data.numeracy_scores || {}, data.max_marks || {});
 
-    const level = overall_score !== undefined ? this.getLevel(overall_score) : undefined;
+    // Force NULL (not undefined/0) for the subject that was NOT assessed this round.
+    // This guarantees PostgreSQL stores NULL, which the dashboard can distinguish from a real 0%.
+    const literacy_pct  = subjects_assessed === 'numeracy' ? {} : (rawLitPct || {});
+    const numeracy_pct  = subjects_assessed === 'literacy' ? {} : (rawNumPct || {});
+    const literacy_total: number | null = subjects_assessed === 'numeracy' ? null : (rawLitTotal ?? null);
+    const numeracy_total: number | null = subjects_assessed === 'literacy' ? null : (rawNumTotal ?? null);
+
+    // Overall = average of only the assessed subject(s)
+    const assessed = [literacy_total, numeracy_total].filter((v): v is number => v !== null);
+    const overall_score: number | null = assessed.length
+      ? +(assessed.reduce((a, b) => a + b, 0) / assessed.length).toFixed(2)
+      : null;
+
+    const level = overall_score !== null ? this.getLevel(overall_score) : undefined;
     const gaps = this.getGaps(literacy_pct, numeracy_pct);
 
     // Subject-wise promotion — each subject promoted independently at 80%
-    const litTotal = literacy_total !== undefined ? +literacy_total : null;
-    const numTotal = numeracy_total !== undefined ? +numeracy_total : null;
     const lit_stage = data.lit_stage || data.stage || 'foundation';
     const num_stage = data.num_stage || data.stage || 'foundation';
     const STAGE_ORDER = ['foundation', 'preparatory', 'middle', 'secondary'];
@@ -436,10 +449,10 @@ export class BaselineService {
     // Use caller-supplied promotion flags if provided, else calculate from %
     const lit_promoted = data.lit_promoted !== undefined
       ? data.lit_promoted
-      : (litTotal !== null && litTotal >= 80);
+      : (literacy_total !== null && literacy_total >= 80);
     const num_promoted = data.num_promoted !== undefined
       ? data.num_promoted
-      : (numTotal !== null && numTotal >= 80);
+      : (numeracy_total !== null && numeracy_total >= 80);
 
     const litStageIdx = STAGE_ORDER.indexOf(lit_stage);
     const numStageIdx = STAGE_ORDER.indexOf(num_stage);
@@ -450,8 +463,6 @@ export class BaselineService {
     const promoted = lit_promoted && num_promoted;
     const promoted_to_stage = promoted ? lit_promoted_to : null;
 
-    // Store subject-wise promotion info in gaps field extension
-    const subjects_assessed = data.subjects_assessed || 'both';
     const promotionInfo = { lit_promoted, num_promoted, lit_promoted_to, num_promoted_to, lit_stage, num_stage, subjects_assessed };
 
     const existing = await this.baselineRepo.findOne({
