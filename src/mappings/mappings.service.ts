@@ -137,8 +137,58 @@ export class MappingsService {
       };
     }
 
-    // No mappings for this year — return empty (correct year isolation behaviour)
-    return { teacher_id, academic_year, is_class_teacher: false, class_grade: null, class_section: null, mappings: [] };
+    // For future/non-current years: no mappings means not yet configured — return empty.
+    // For the current academic year: fall back to users table fields so teachers who were
+    // imported but not yet explicitly mapped still see their classes.
+    const now = new Date();
+    const yr = now.getMonth() >= 5 ? now.getFullYear() : now.getFullYear() - 1;
+    const currentAcademicYear = `${yr}-${String(yr + 1).slice(2)}`;
+    if (academic_year !== currentAcademicYear) {
+      return { teacher_id, academic_year, is_class_teacher: false, class_grade: null, class_section: null, mappings: [] };
+    }
+
+    // Fallback: derive from users table fields (current year only)
+    const classes: string[] = [...new Set((user.assigned_classes || []).filter(Boolean).map(c => this.normalizeGrade(c)).filter(Boolean))];
+    const rawSections: string[] = (user.assigned_sections || []).filter(Boolean);
+    let allSections = false;
+    let sections: string[] = [];
+    for (const s of rawSections) {
+      if (s.toLowerCase().includes('all')) { allSections = true; break; }
+      sections.push(this.normalizeSection(s));
+    }
+    sections = [...new Set(sections.filter(Boolean))];
+    const subjects: string[] = (user.subjects || []).filter(Boolean);
+    const { grade: class_grade, section: class_section } = this.parseClassTeacherOf(user.class_teacher_of || '', classes);
+    const studentRows: any[] = await this.studentRepo.query('SELECT DISTINCT current_class as grade, section FROM students WHERE is_active = true');
+    const validCombos: { grade: string; section: string }[] = [];
+    const seen = new Set<string>();
+    for (const row of studentRows) {
+      const dbGrade = (row.grade || '').trim();
+      const dbSection = (row.section || '').trim();
+      if (!dbGrade || !dbSection) continue;
+      const teachesGrade = classes.some(c => c.toLowerCase() === this.normalizeGrade(dbGrade).toLowerCase());
+      if (!teachesGrade) continue;
+      const teachesSection = allSections || sections.some(s => s.toLowerCase() === dbSection.toLowerCase());
+      if (!teachesSection) continue;
+      const key = dbGrade + '||' + dbSection;
+      if (!seen.has(key)) { seen.add(key); validCombos.push({ grade: dbGrade, section: dbSection }); }
+    }
+    validCombos.sort((a, b) => a.grade !== b.grade ? a.grade.localeCompare(b.grade) : a.section.localeCompare(b.section));
+    const mappings: any[] = [];
+    const seenM = new Set<string>();
+    for (const { grade, section } of validCombos) {
+      const isCT = !!(class_grade && class_section && grade.toLowerCase() === class_grade.toLowerCase() && section.toLowerCase() === class_section.toLowerCase());
+      if (subjects.length) {
+        for (const subject of subjects) {
+          const key = grade + '||' + section + '||' + subject;
+          if (!seenM.has(key)) { seenM.add(key); mappings.push({ grade, section, subject, is_class_teacher: isCT }); }
+        }
+      } else {
+        const key = grade + '||' + section + '||';
+        if (!seenM.has(key)) { seenM.add(key); mappings.push({ grade, section, subject: null, is_class_teacher: isCT }); }
+      }
+    }
+    return { teacher_id, academic_year, is_class_teacher: !!(class_grade && class_section), class_grade, class_section, mappings };
   }
 
   async getAllMappings(academic_year: string) {
