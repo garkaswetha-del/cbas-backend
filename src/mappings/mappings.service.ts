@@ -119,6 +119,29 @@ export class MappingsService {
     });
 
     if (dbMappings.length === 0) {
+      // For past years with no teacher_mappings rows, fall back to users table fields
+      const now = new Date();
+      const curYr = now.getMonth() >= 5 ? now.getFullYear() : now.getFullYear() - 1;
+      const currentYear = `${curYr}-${String(curYr + 1).slice(2)}`;
+      const isPastYear = academic_year < currentYear;
+      if (isPastYear && user.assigned_classes?.length) {
+        const classes = user.assigned_classes || [];
+        const ctParts = user.class_teacher_of ? user.class_teacher_of.split(' ') : [];
+        const ctGrade = ctParts.length >= 2 ? ctParts.slice(0, -1).join(' ') : null;
+        const ctSection = ctParts.length >= 2 ? ctParts[ctParts.length - 1] : null;
+        const fallbackMappings = classes.map(grade => ({
+          grade,
+          section: ctGrade === grade ? ctSection : null,
+          subject: null,
+          is_class_teacher: ctGrade === grade,
+        }));
+        return {
+          teacher_id, academic_year,
+          is_class_teacher: !!ctGrade,
+          class_grade: ctGrade, class_section: ctSection,
+          mappings: fallbackMappings,
+        };
+      }
       return { teacher_id, academic_year, is_class_teacher: false, class_grade: null, class_section: null, mappings: [] };
     }
 
