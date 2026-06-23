@@ -26,7 +26,7 @@ export class AppraisalService {
         teacher_name: teacher.name,
         appraisal_qualification: teacher.appraisal_qualification || teacher.qualification || null,
         assigned_classes: teacher.assigned_classes || [],
-        salary: (teacher as any).salary || null,
+        over_salary_cap: teacher.over_salary_cap || false,
         appraisal: appraisal || null,
       };
     });

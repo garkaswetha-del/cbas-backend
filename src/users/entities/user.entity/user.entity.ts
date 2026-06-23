@@ -72,6 +72,9 @@ export class User {
   @Column({ default: false })
   credentials_shared: boolean;
 
+  @Column({ nullable: true, default: false })
+  over_salary_cap: boolean;
+
   @CreateDateColumn()
   created_at: Date;
 
