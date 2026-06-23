@@ -1,15 +1,23 @@
-import { Injectable, ConflictException, NotFoundException } from '@nestjs/common';
+import { Injectable, ConflictException, NotFoundException, OnModuleInit } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { User, UserRole } from './entities/user.entity/user.entity';
 import * as bcrypt from 'bcrypt';
 
 @Injectable()
-export class UsersService {
+export class UsersService implements OnModuleInit {
   constructor(
     @InjectRepository(User)
     private userRepo: Repository<User>,
   ) {}
+
+  async onModuleInit() {
+    try {
+      await this.userRepo.query(
+        `ALTER TABLE users ADD COLUMN IF NOT EXISTS over_salary_cap boolean NOT NULL DEFAULT false`,
+      );
+    } catch { /* column already exists or DB not ready — safe to ignore */ }
+  }
 
   async findAll(filters?: { role?: string; subject?: string; grade?: string; qualification?: string }) {
     const query = this.userRepo.createQueryBuilder('user')

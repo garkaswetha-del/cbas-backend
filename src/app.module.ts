@@ -65,7 +65,7 @@ import { BaselineParticipation } from './baseline/entities/baseline-participatio
             entities,
             synchronize: false,
             migrationsRun: true,
-            migrations: [__dirname + '/../migrations/*.js'],
+            migrations: [__dirname + '/migrations/*.js'],
             logging: false,
           };
         }
@@ -79,7 +79,7 @@ import { BaselineParticipation } from './baseline/entities/baseline-participatio
           entities,
           synchronize: false,
           migrationsRun: true,
-          migrations: [__dirname + '/../migrations/*.js'],
+          migrations: [__dirname + '/migrations/*.js'],
           logging: false,
         };
       },
