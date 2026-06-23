@@ -71,6 +71,11 @@ export class UsersController {
     return this.usersService.markShared(id);
   }
 
+  @Patch(':id/cap-status')
+  updateCapStatus(@Param('id') id: string, @Body() body: { over_salary_cap: boolean }) {
+    return this.usersService.updateCapStatus(id, body.over_salary_cap);
+  }
+
   @Patch(':id')
   update(@Param('id') id: string, @Body() body: any) {
     return this.usersService.update(id, body);

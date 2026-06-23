@@ -184,6 +184,14 @@ export class UsersService {
     return { message: 'Password reset successfully' };
   }
 
+  async updateCapStatus(id: string, overSalaryCap: boolean) {
+    await this.userRepo.query(
+      `UPDATE users SET over_salary_cap = $1 WHERE id = $2`,
+      [overSalaryCap, id],
+    );
+    return { id, over_salary_cap: overSalaryCap };
+  }
+
   async markShared(id: string) {
     await this.userRepo.update(id, { credentials_shared: true });
     return { message: 'Credentials marked as shared' };
