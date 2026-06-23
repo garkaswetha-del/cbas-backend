@@ -34,7 +34,7 @@ export class ObservationService {
     return this.userRepo.find({
       where: { is_active: true },
       order: { name: 'ASC' },
-      select: ['id', 'name', 'email'],
+      select: ['id', 'name', 'email', 'assigned_classes'],
     });
   }
 
