@@ -19,6 +19,16 @@ export class AppraisalService {
       where: { role: UserRole.TEACHER },
     });
     const appraisals = await this.appraisalRepo.find({ where: { academic_year } });
+
+    // Fetch over_salary_cap via raw query — gracefully falls back to false if column not yet migrated
+    const capMap: Record<string, boolean> = {};
+    try {
+      const rows: { id: string; over_salary_cap: boolean }[] = await this.userRepo.query(
+        `SELECT id, over_salary_cap FROM users WHERE role = 'teacher'`
+      );
+      rows.forEach(r => { capMap[r.id] = r.over_salary_cap || false; });
+    } catch { /* column doesn't exist yet — all teachers default to false */ }
+
     return teachers.map((teacher) => {
       const appraisal = appraisals.find((a) => a.teacher_id === teacher.id);
       return {
@@ -26,7 +36,7 @@ export class AppraisalService {
         teacher_name: teacher.name,
         appraisal_qualification: teacher.appraisal_qualification || teacher.qualification || null,
         assigned_classes: teacher.assigned_classes || [],
-        over_salary_cap: teacher.over_salary_cap || false,
+        over_salary_cap: capMap[teacher.id] ?? false,
         appraisal: appraisal || null,
       };
     });
