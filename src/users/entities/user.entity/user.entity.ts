@@ -5,6 +5,7 @@ export enum UserRole {
   PRINCIPAL = 'principal',
   ADMIN = 'admin',
   TEACHER = 'teacher',
+  AHM = 'ahm',
 }
 
 @Entity('users')

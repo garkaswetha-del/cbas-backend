@@ -16,7 +16,10 @@ export class UsersService implements OnModuleInit {
       await this.userRepo.query(
         `ALTER TABLE users ADD COLUMN IF NOT EXISTS over_salary_cap boolean NOT NULL DEFAULT false`,
       );
-    } catch { /* column already exists or DB not ready — safe to ignore */ }
+    } catch { /* safe to ignore */ }
+    try {
+      await this.userRepo.query(`ALTER TYPE users_role_enum ADD VALUE IF NOT EXISTS 'ahm'`);
+    } catch { /* safe to ignore — enum value may already exist */ }
   }
 
   async findAll(filters?: { role?: string; subject?: string; grade?: string; qualification?: string }) {
