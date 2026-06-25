@@ -1,4 +1,4 @@
-import { Injectable } from '@nestjs/common';
+import { Injectable, OnModuleInit } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { TeacherObservation } from './entities/teacher-observation.entity/teacher-observation.entity';
@@ -22,11 +22,29 @@ function computeScores(data: any): { total_score: number; percentage: number } {
 }
 
 @Injectable()
-export class ObservationService {
+export class ObservationService implements OnModuleInit {
   constructor(
     @InjectRepository(TeacherObservation) private obsRepo: Repository<TeacherObservation>,
     @InjectRepository(User) private userRepo: Repository<User>,
   ) {}
+
+  async onModuleInit() {
+    try {
+      await this.obsRepo.query(
+        `ALTER TABLE teacher_observations ADD COLUMN IF NOT EXISTS teacher_id UUID`,
+      );
+    } catch { }
+    // Backfill teacher_id for existing records using email match
+    try {
+      await this.obsRepo.query(`
+        UPDATE teacher_observations o
+        SET teacher_id = u.id
+        FROM users u
+        WHERE LOWER(u.email) = LOWER(o.teacher_email)
+          AND o.teacher_id IS NULL
+      `);
+    } catch { }
+  }
 
   // ── GET ALL TEACHERS (for dropdown) ─────────────────────
 
@@ -45,6 +63,7 @@ export class ObservationService {
     const obs = this.obsRepo.create({
       teacher_name: data.teacher_name,
       teacher_email: data.teacher_email,
+      teacher_id: data.teacher_id || null,
       grade_observed: data.grade_observed,
       section_observed: data.section_observed || null,
       subject_observed: data.subject_observed,
@@ -122,11 +141,11 @@ export class ObservationService {
     });
   }
 
-  // ── GET MY OBSERVATIONS by email (no shared filter) ──────
+  // ── GET MY OBSERVATIONS by teacher_id (falls back to email) ─
 
-  async getMyObservations(teacher_email: string, academic_year?: string) {
-    if (!teacher_email) return [];
-    const where: any = { teacher_email, is_active: true };
+  async getMyObservations(teacher_id: string, academic_year?: string) {
+    if (!teacher_id) return [];
+    const where: any = { teacher_id, is_active: true };
     if (academic_year) where.academic_year = academic_year;
     return this.obsRepo.find({
       where,

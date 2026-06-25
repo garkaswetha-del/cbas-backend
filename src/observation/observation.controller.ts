@@ -42,10 +42,10 @@ export class ObservationController {
 
   @Get('mine')
   getMyObservations(
-    @Query('teacher_email') teacher_email: string,
+    @Query('teacher_id') teacher_id: string,
     @Query('academic_year') academic_year: string,
   ) {
-    return this.observationService.getMyObservations(teacher_email, academic_year);
+    return this.observationService.getMyObservations(teacher_id, academic_year);
   }
 
   @Get(':id')
