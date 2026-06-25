@@ -42,6 +42,7 @@ import { Section } from './sections/entities/section.entity';
 import { SectionsModule } from './sections/sections.module';
 import { BaselineConfigV2 } from './baseline/entities/baseline-config-v2.entity';
 import { BaselineParticipation } from './baseline/entities/baseline-participation.entity';
+import { PortfolioModule } from './portfolio/portfolio.module';
 
 @Module({
   imports: [
@@ -104,6 +105,7 @@ import { BaselineParticipation } from './baseline/entities/baseline-participatio
     HomeworkModule,
     TeacherAssignmentsModule,
     SectionsModule,
+    PortfolioModule,
   ],
 })
 export class AppModule {}
