@@ -40,6 +40,14 @@ export class ObservationController {
     return this.observationService.getSharedObservations(teacher_email);
   }
 
+  @Get('mine')
+  getMyObservations(
+    @Query('teacher_email') teacher_email: string,
+    @Query('academic_year') academic_year: string,
+  ) {
+    return this.observationService.getMyObservations(teacher_email, academic_year);
+  }
+
   @Get(':id')
   getObservationById(@Param('id') id: string) {
     return this.observationService.getObservationById(id);

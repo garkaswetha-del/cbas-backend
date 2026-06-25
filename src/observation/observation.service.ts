@@ -122,6 +122,18 @@ export class ObservationService {
     });
   }
 
+  // ── GET MY OBSERVATIONS by email (no shared filter) ──────
+
+  async getMyObservations(teacher_email: string, academic_year?: string) {
+    if (!teacher_email) return [];
+    const where: any = { teacher_email, is_active: true };
+    if (academic_year) where.academic_year = academic_year;
+    return this.obsRepo.find({
+      where,
+      order: { observation_date: 'DESC' },
+    });
+  }
+
   // ── DASHBOARD ────────────────────────────────────────────
 
   async getDashboard(academic_year: string) {
