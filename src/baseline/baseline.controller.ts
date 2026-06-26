@@ -120,6 +120,11 @@ export class BaselineController {
     return this.baselineService.setParticipation(body.academic_year, body.participating_grades);
   }
 
+  @Delete('assessment/:id')
+  deleteAssessmentById(@Param('id') id: string) {
+    return this.baselineService.deleteAssessmentById(id);
+  }
+
   @Delete('section')
   deleteSectionData(
     @Query('grade') grade: string,
