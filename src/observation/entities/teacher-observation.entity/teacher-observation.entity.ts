@@ -21,9 +21,6 @@ export class TeacherObservation {
   @Column({ nullable: true })
   teacher_id: string;
 
-  @Column({ nullable: true })
-  teacher_id: string;
-
   @Column()
   grade_observed: string;
 
