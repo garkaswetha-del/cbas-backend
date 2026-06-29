@@ -1,14 +1,22 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
+import { Injectable, NotFoundException, OnModuleInit } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository, Like } from 'typeorm';
 import { Student } from './entities/student.entity/student.entity';
 
 @Injectable()
-export class StudentsService {
+export class StudentsService implements OnModuleInit {
   constructor(
     @InjectRepository(Student)
     private studentRepo: Repository<Student>,
   ) {}
+
+  async onModuleInit() {
+    try {
+      await this.studentRepo.query(
+        `ALTER TABLE students ADD COLUMN IF NOT EXISTS caste VARCHAR`,
+      );
+    } catch {}
+  }
 
   // Get all students with optional filters
   async findAll(filters?: {
