@@ -43,6 +43,7 @@ import { SectionsModule } from './sections/sections.module';
 import { BaselineConfigV2 } from './baseline/entities/baseline-config-v2.entity';
 import { BaselineParticipation } from './baseline/entities/baseline-participation.entity';
 import { PortfolioModule } from './portfolio/portfolio.module';
+import { MemosModule } from './memos/memos.module';
 
 @Module({
   imports: [
@@ -106,6 +107,7 @@ import { PortfolioModule } from './portfolio/portfolio.module';
     TeacherAssignmentsModule,
     SectionsModule,
     PortfolioModule,
+    MemosModule,
   ],
 })
 export class AppModule {}
