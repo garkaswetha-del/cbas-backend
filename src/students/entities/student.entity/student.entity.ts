@@ -54,6 +54,9 @@ export class Student {
   @Column({ nullable: true })
   address: string;
 
+  @Column({ nullable: true })
+  caste: string;
+
   @Column({ default: true })
   is_active: boolean;
 

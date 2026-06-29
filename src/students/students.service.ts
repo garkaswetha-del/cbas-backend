@@ -186,7 +186,7 @@ export class StudentsService implements OnModuleInit {
             'admission_no', 'gender', 'phone', 'dob', 'admission_year',
             'father_name', 'mother_name', 'parent_phone', 'address',
             'father_qualification', 'mother_qualification',
-            'father_working_status', 'mother_working_status',
+            'father_working_status', 'mother_working_status', 'caste',
           ];
           for (const f of fields) { if (s[f]) (patch as any)[f] = s[f]; }
           if (Object.keys(patch).length > 0) await this.studentRepo.update(existing.id, patch);
