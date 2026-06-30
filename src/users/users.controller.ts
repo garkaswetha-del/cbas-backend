@@ -76,6 +76,11 @@ export class UsersController {
     return this.usersService.updateCapStatus(id, body.over_salary_cap);
   }
 
+  @Patch(':id/change-password')
+  changePassword(@Param('id') id: string, @Body() body: { current_password: string; new_password: string }) {
+    return this.usersService.changePassword(id, body.current_password, body.new_password);
+  }
+
   @Patch(':id')
   update(@Param('id') id: string, @Body() body: any) {
     return this.usersService.update(id, body);

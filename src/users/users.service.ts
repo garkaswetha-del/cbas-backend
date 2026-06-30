@@ -1,4 +1,4 @@
-import { Injectable, ConflictException, NotFoundException, OnModuleInit } from '@nestjs/common';
+import { Injectable, ConflictException, NotFoundException, UnauthorizedException, OnModuleInit } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { User, UserRole } from './entities/user.entity/user.entity';
@@ -187,6 +187,16 @@ export class UsersService implements OnModuleInit {
 
     await this.userRepo.update(id, data);
     return this.findOne(id);
+  }
+
+  async changePassword(id: string, currentPassword: string, newPassword: string) {
+    const user = await this.userRepo.findOne({ where: { id } });
+    if (!user) throw new NotFoundException('User not found');
+    const valid = await bcrypt.compare(currentPassword, user.password_hash);
+    if (!valid) throw new UnauthorizedException('Current password is incorrect');
+    const password_hash = await bcrypt.hash(newPassword, 10);
+    await this.userRepo.update(id, { password: newPassword, password_hash });
+    return { message: 'Password changed successfully' };
   }
 
   async resetPassword(id: string, newPassword: string) {
