@@ -269,9 +269,14 @@ export class BaselineService {
       .orderBy('student.name', 'ASC')
       .getMany();
 
-    const assessments = await this.baselineRepo.find({
-      where: { grade, section, academic_year, round: round as AssessmentRound, entity_type: EntityType.STUDENT },
-    });
+    const assessments = await this.baselineRepo
+      .createQueryBuilder('ba')
+      .where('LOWER(ba.grade) = LOWER(:grade)', { grade })
+      .andWhere('LOWER(ba.section) = LOWER(:section)', { section })
+      .andWhere('ba.academic_year = :academic_year', { academic_year })
+      .andWhere('ba.round = :round', { round })
+      .andWhere('ba.entity_type = :entity_type', { entity_type: EntityType.STUDENT })
+      .getMany();
 
     return students.map(s => {
       const assessment = assessments.find(a => a.entity_id === s.id);
@@ -753,10 +758,14 @@ export class BaselineService {
       .orderBy('student.name', 'ASC')
       .getMany();
 
-    const assessments = await this.baselineRepo.find({
-      where: { grade, section, academic_year, entity_type: EntityType.STUDENT },
-      order: { round: 'ASC' },
-    });
+    const assessments = await this.baselineRepo
+      .createQueryBuilder('ba')
+      .where('LOWER(ba.grade) = LOWER(:grade)', { grade })
+      .andWhere('LOWER(ba.section) = LOWER(:section)', { section })
+      .andWhere('ba.academic_year = :academic_year', { academic_year })
+      .andWhere('ba.entity_type = :entity_type', { entity_type: EntityType.STUDENT })
+      .orderBy('ba.round', 'ASC')
+      .getMany();
 
     const ROUND_ORDER = ['baseline_1','baseline_2','baseline_3','baseline_4','baseline_5',
       'baseline_6','baseline_7','baseline_8','baseline_9','baseline_10'];
