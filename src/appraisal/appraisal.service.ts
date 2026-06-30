@@ -4,6 +4,7 @@ import { Repository } from 'typeorm';
 import { TeacherAppraisal } from '../assessments/entities/teacher-appraisal.entity/teacher-appraisal.entity';
 import { User } from '../users/entities/user.entity/user.entity';
 import { UserRole } from '../users/entities/user.entity/user.entity';
+import { TeacherMapping } from '../mappings/entities/teacher-mapping.entity/teacher-mapping.entity';
 
 @Injectable()
 export class AppraisalService {
@@ -12,12 +13,22 @@ export class AppraisalService {
     private appraisalRepo: Repository<TeacherAppraisal>,
     @InjectRepository(User)
     private userRepo: Repository<User>,
+    @InjectRepository(TeacherMapping)
+    private mappingRepo: Repository<TeacherMapping>,
   ) {}
 
   async getAllAppraisals(academic_year: string) {
-    const teachers = await this.userRepo.find({
-      where: { role: UserRole.TEACHER },
+    // Get distinct teacher_ids that have active mappings for this year
+    const mappings = await this.mappingRepo.find({
+      where: { academic_year, is_active: true },
     });
+    const teacherIdsInYear = [...new Set(mappings.map(m => m.teacher_id))];
+
+    if (teacherIdsInYear.length === 0) {
+      return [];
+    }
+
+    const teachers = await this.userRepo.findByIds(teacherIdsInYear);
     const appraisals = await this.appraisalRepo.find({ where: { academic_year } });
 
     // Fetch over_salary_cap via raw query — gracefully falls back to false if column not yet migrated
@@ -29,13 +40,22 @@ export class AppraisalService {
       rows.forEach(r => { capMap[r.id] = r.over_salary_cap || false; });
     } catch { /* column doesn't exist yet — all teachers default to false */ }
 
+    // Build year-specific grade list per teacher from mappings
+    const gradesByTeacher: Record<string, string[]> = {};
+    mappings.forEach(m => {
+      if (!gradesByTeacher[m.teacher_id]) gradesByTeacher[m.teacher_id] = [];
+      if (m.grade && !gradesByTeacher[m.teacher_id].includes(m.grade)) {
+        gradesByTeacher[m.teacher_id].push(m.grade);
+      }
+    });
+
     return teachers.map((teacher) => {
       const appraisal = appraisals.find((a) => a.teacher_id === teacher.id);
       return {
         teacher_id: teacher.id,
         teacher_name: teacher.name,
         appraisal_qualification: teacher.appraisal_qualification || teacher.qualification || null,
-        assigned_classes: teacher.assigned_classes || [],
+        assigned_classes: gradesByTeacher[teacher.id] || [],
         over_salary_cap: capMap[teacher.id] ?? false,
         appraisal: appraisal || null,
       };
