@@ -9,9 +9,10 @@ import { LearningLink } from '../assessments/entities/learning-link.entity/learn
 import { SectionsModule } from '../sections/sections.module';
 import { BaselineConfigV2 } from './entities/baseline-config-v2.entity';
 import { BaselineParticipation } from './entities/baseline-participation.entity';
+import { TeacherMapping } from '../mappings/entities/teacher-mapping.entity/teacher-mapping.entity';
 
 @Module({
-  imports: [TypeOrmModule.forFeature([BaselineAssessment, Student, User, LearningLink, BaselineConfigV2, BaselineParticipation]), SectionsModule],
+  imports: [TypeOrmModule.forFeature([BaselineAssessment, Student, User, LearningLink, BaselineConfigV2, BaselineParticipation, TeacherMapping]), SectionsModule],
   controllers: [BaselineController],
   providers: [BaselineService],
   exports: [BaselineService],

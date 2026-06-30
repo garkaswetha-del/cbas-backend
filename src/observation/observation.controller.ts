@@ -6,8 +6,8 @@ export class ObservationController {
   constructor(private readonly observationService: ObservationService) {}
 
   @Get('teachers')
-  getTeachers() {
-    return this.observationService.getTeachers();
+  getTeachers(@Query('academic_year') academic_year?: string) {
+    return this.observationService.getTeachers(academic_year);
   }
 
   @Post()

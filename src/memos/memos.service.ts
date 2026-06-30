@@ -112,7 +112,12 @@ export class MemosService implements OnModuleInit {
 
     if (memo.target_type === 'all') {
       recipients = await this.dataSource.query(
-        `SELECT id::text AS teacher_id, name AS teacher_name FROM users WHERE role = 'teacher' ORDER BY name`,
+        `SELECT DISTINCT u.id::text AS teacher_id, u.name AS teacher_name
+         FROM users u
+         JOIN teacher_mappings tm ON tm.teacher_id = u.id
+         WHERE u.role = 'teacher' AND tm.academic_year = $1 AND tm.is_active = true
+         ORDER BY u.name`,
+        [year],
       );
     } else if (memo.target_type === 'stage') {
       const stage = memo.target_value;

@@ -7,6 +7,7 @@ import { User } from '../users/entities/user.entity/user.entity';
 import { SectionsService } from '../sections/sections.service';
 import { BaselineConfigV2 } from './entities/baseline-config-v2.entity';
 import { BaselineParticipation } from './entities/baseline-participation.entity';
+import { TeacherMapping } from '../mappings/entities/teacher-mapping.entity/teacher-mapping.entity';
 
 @Injectable()
 export class BaselineService {
@@ -21,6 +22,8 @@ export class BaselineService {
     private configRepo: Repository<BaselineConfigV2>,
     @InjectRepository(BaselineParticipation)
     private participationRepo: Repository<BaselineParticipation>,
+    @InjectRepository(TeacherMapping)
+    private mappingRepo: Repository<TeacherMapping>,
     @InjectDataSource()
     private dataSource: DataSource,
     private sectionsService: SectionsService,
@@ -522,7 +525,11 @@ export class BaselineService {
 
   // ── Teacher dashboard ──────────────────────────────────────────
   async getTeacherDashboard(academic_year: string, round: string) {
-    const teachers = await this.userRepo.find({ where: { role: 'teacher' as any, is_active: true } });
+    const mappings = await this.mappingRepo.find({ where: { academic_year, is_active: true } });
+    const teacherIds = [...new Set(mappings.map(m => m.teacher_id))];
+    const teachers = teacherIds.length > 0
+      ? await this.userRepo.findByIds(teacherIds)
+      : [];
     const assessments = await this.baselineRepo.find({
       where: { academic_year, round: round as AssessmentRound, entity_type: EntityType.TEACHER },
     });

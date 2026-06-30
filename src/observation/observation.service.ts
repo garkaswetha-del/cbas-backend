@@ -3,6 +3,7 @@ import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { TeacherObservation } from './entities/teacher-observation.entity/teacher-observation.entity';
 import { User } from '../users/entities/user.entity/user.entity';
+import { TeacherMapping } from '../mappings/entities/teacher-mapping.entity/teacher-mapping.entity';
 
 const RATING_SCORE: Record<string, number> = {
   not_done: 0, attempted: 1, done: 2, well_done: 3,
@@ -26,6 +27,7 @@ export class ObservationService implements OnModuleInit {
   constructor(
     @InjectRepository(TeacherObservation) private obsRepo: Repository<TeacherObservation>,
     @InjectRepository(User) private userRepo: Repository<User>,
+    @InjectRepository(TeacherMapping) private mappingRepo: Repository<TeacherMapping>,
   ) {}
 
   async onModuleInit() {
@@ -48,7 +50,24 @@ export class ObservationService implements OnModuleInit {
 
   // ── GET ALL TEACHERS (for dropdown) ─────────────────────
 
-  async getTeachers() {
+  async getTeachers(academic_year?: string) {
+    if (academic_year) {
+      const mappings = await this.mappingRepo.find({ where: { academic_year, is_active: true } });
+      if (mappings.length > 0) {
+        const gradesByTeacher: Record<string, string[]> = {};
+        mappings.forEach(m => {
+          if (!gradesByTeacher[m.teacher_id]) gradesByTeacher[m.teacher_id] = [];
+          if (m.grade && !gradesByTeacher[m.teacher_id].includes(m.grade))
+            gradesByTeacher[m.teacher_id].push(m.grade);
+        });
+        const ids = Object.keys(gradesByTeacher);
+        const users = await this.userRepo.findByIds(ids, { order: { name: 'ASC' } });
+        return users.map(u => ({
+          id: u.id, name: u.name, email: u.email,
+          assigned_classes: gradesByTeacher[u.id] || [],
+        }));
+      }
+    }
     return this.userRepo.find({
       where: { is_active: true },
       order: { name: 'ASC' },
