@@ -61,7 +61,8 @@ export class ObservationService implements OnModuleInit {
             gradesByTeacher[m.teacher_id].push(m.grade);
         });
         const ids = Object.keys(gradesByTeacher);
-        const users = await this.userRepo.findByIds(ids, { order: { name: 'ASC' } });
+        const users = await this.userRepo.findByIds(ids);
+        users.sort((a, b) => a.name.localeCompare(b.name));
         return users.map(u => ({
           id: u.id, name: u.name, email: u.email,
           assigned_classes: gradesByTeacher[u.id] || [],
