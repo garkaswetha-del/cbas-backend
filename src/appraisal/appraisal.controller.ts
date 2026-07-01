@@ -12,6 +12,13 @@ export class AppraisalController {
     return this.appraisalService.getAllAppraisals(academic_year || '2025-26');
   }
 
+  // GET aggregated appraisal summary for super dashboard
+  // Usage: GET /appraisal/summary?academic_year=2025-26
+  @Get('summary')
+  getSummary(@Query('academic_year') academic_year: string) {
+    return this.appraisalService.getSummary(academic_year || '2025-26');
+  }
+
   // GET single teacher appraisal
   // Usage: GET /appraisal/teacher/:teacher_id?academic_year=2025-26
   @Get('teacher/:teacher_id')

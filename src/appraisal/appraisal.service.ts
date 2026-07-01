@@ -137,6 +137,62 @@ export class AppraisalService {
     return appraisal;
   }
 
+  async getSummary(academic_year: string) {
+    const mappings = await this.mappingRepo.find({ where: { academic_year, is_active: true } });
+    const teacherIds = [...new Set(mappings.map(m => m.teacher_id))];
+    const totalTeachers = teacherIds.length;
+
+    if (totalTeachers === 0) {
+      return { totalTeachers: 0, appraised: 0, pending: 0, avgOverallPct: 0, dimensionAverages: {}, qualificationBreakdown: [], top5: [], bottom5: [] };
+    }
+
+    const teachers = await this.userRepo.findByIds(teacherIds);
+    const appraisals = await this.appraisalRepo.find({ where: { academic_year } });
+    const appraised = appraisals.length;
+
+    const avg = (arr: number[]) => arr.length ? +(arr.reduce((a, b) => a + b, 0) / arr.length).toFixed(1) : 0;
+
+    const pcts = appraisals.filter(a => a.overall_percentage != null).map(a => +a.overall_percentage);
+    const avgOverallPct = avg(pcts);
+
+    const dimFields = ['skills_score', 'behaviour_score', 'classroom_score', 'parents_feedback_score', 'english_comm_score', 'responsibilities_score', 'exam_score'];
+    const dimensionAverages: Record<string, number> = {};
+    dimFields.forEach(field => {
+      const vals = appraisals.filter(a => (a as any)[field] != null).map(a => +((a as any)[field]) * 100);
+      dimensionAverages[field.replace('_score', '')] = avg(vals);
+    });
+
+    // Qualification breakdown
+    const qualMap: Record<string, { count: number; pcts: number[] }> = {};
+    teachers.forEach(t => {
+      const q = ((t as any).appraisal_qualification || t.qualification || 'Unknown')
+        .toUpperCase().replace(/B\.ED/g, 'BED').replace(/D\.ED/g, 'DED');
+      if (!qualMap[q]) qualMap[q] = { count: 0, pcts: [] };
+      qualMap[q].count++;
+      const ap = appraisals.find(a => a.teacher_id === t.id);
+      if (ap?.overall_percentage != null) qualMap[q].pcts.push(+ap.overall_percentage);
+    });
+    const qualificationBreakdown = Object.entries(qualMap)
+      .map(([qualification, data]) => ({ qualification, count: data.count, avgPct: avg(data.pcts) }))
+      .sort((a, b) => b.count - a.count);
+
+    const ranked = appraisals
+      .filter(a => a.overall_percentage != null)
+      .map(a => ({ name: a.teacher_name || 'Unknown', pct: +(+a.overall_percentage).toFixed(1) }))
+      .sort((a, b) => b.pct - a.pct);
+
+    return {
+      totalTeachers,
+      appraised,
+      pending: totalTeachers - appraised,
+      avgOverallPct,
+      dimensionAverages,
+      qualificationBreakdown,
+      top5: ranked.slice(0, 5),
+      bottom5: [...ranked].reverse().slice(0, 5),
+    };
+  }
+
   private calculateLiteracyScore(data: any): number {
     const map: Record<string, number> = {
       'CREATIVE METHODS FOR PHONICS, VOCABULARY, READING & WRITING - EXCELLENT - 5': 5,
