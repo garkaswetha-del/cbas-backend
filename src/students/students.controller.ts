@@ -69,6 +69,15 @@ export class StudentsController {
     return this.studentsService.promoteStudents(body);
   }
 
+  // POST batch promotion — each student gets their own target section
+  @Post('promotion/execute-batch')
+  promoteStudentsBatch(@Body() body: {
+    from_grade: string;
+    assignments: { student_id: string; to_section: string }[];
+  }) {
+    return this.studentsService.promoteStudentsBatch(body);
+  }
+
   // POST graduate Grade 10 students
   @Post('graduation/execute')
   graduateStudents(@Body() body: {

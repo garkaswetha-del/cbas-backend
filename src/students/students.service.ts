@@ -326,6 +326,29 @@ export class StudentsService implements OnModuleInit {
     };
   }
 
+  // Execute batch promotion: each student can go to a different target section
+  async promoteStudentsBatch(data: {
+    from_grade: string;
+    assignments: { student_id: string; to_section: string }[];
+  }) {
+    const next = this.nextGrade(data.from_grade);
+    if (!next) return { error: `${data.from_grade} is the final grade. Cannot promote further.` };
+
+    const sectionCounts: Record<string, number> = {};
+    for (const { student_id, to_section } of data.assignments) {
+      await this.studentRepo.update(student_id, { current_class: next, section: to_section });
+      sectionCounts[to_section] = (sectionCounts[to_section] || 0) + 1;
+    }
+    return {
+      success: true,
+      promoted_count: data.assignments.length,
+      from_grade: data.from_grade,
+      to_grade: next,
+      section_counts: sectionCounts,
+      message: `${data.assignments.length} students promoted from ${data.from_grade} to ${next}`,
+    };
+  }
+
   // Get all sections for a grade (for promotion UI)
   async getSectionsForGrade(grade: string) {
     const students = await this.studentRepo.find({
