@@ -234,26 +234,28 @@ export class UsersService implements OnModuleInit {
   }
 
   async login(email: string, password: string) {
-    if (email === 'garkaswetha@gmail.com' && password === 'swetha123') {
+    const principalEmail    = process.env.PRINCIPAL_EMAIL;
+    const principalPassword = process.env.PRINCIPAL_PASSWORD;
+    const principalName     = process.env.PRINCIPAL_NAME ?? 'Principal';
+
+    if (principalEmail && principalPassword && email === principalEmail && password === principalPassword) {
       return {
         success: true,
         user: {
           id: 'admin-principal',
-          name: 'Swetha Garka',
-          email: 'garkaswetha@gmail.com',
+          name: principalName,
+          email: principalEmail,
           role: 'principal',
         },
       };
     }
 
     const user = await this.userRepo.findOne({ where: { email, is_active: true } });
-    if (!user) throw new NotFoundException('User not found');
+    const plainMatch = user?.password && user.password === password;
+    const hashMatch  = user ? await bcrypt.compare(password, user.password_hash) : false;
 
-    const plainMatch = user.password && user.password === password;
-    const hashMatch = await bcrypt.compare(password, user.password_hash);
-
-    if (!plainMatch && !hashMatch) {
-      throw new NotFoundException('Invalid password');
+    if (!user || (!plainMatch && !hashMatch)) {
+      throw new NotFoundException('Invalid credentials');
     }
 
     await this.userRepo.update(user.id, { last_login_at: new Date() });
