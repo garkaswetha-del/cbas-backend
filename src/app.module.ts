@@ -69,6 +69,7 @@ import { AuditLogInterceptor } from './audit-log/audit-log.interceptor';
             type: 'postgres',
             url: databaseUrl,
             ssl: { rejectUnauthorized: false },
+            extra: { max: 40 },
             entities,
             synchronize: false,
             migrationsRun: true,
