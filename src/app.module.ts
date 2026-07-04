@@ -44,6 +44,7 @@ import { BaselineConfigV2 } from './baseline/entities/baseline-config-v2.entity'
 import { BaselineParticipation } from './baseline/entities/baseline-participation.entity';
 import { PortfolioModule } from './portfolio/portfolio.module';
 import { MemosModule } from './memos/memos.module';
+import { AuditLog } from './audit-log/entities/audit-log.entity';
 
 @Module({
   imports: [
@@ -58,6 +59,7 @@ import { MemosModule } from './memos/memos.module';
           BaselineAssessment, LearningLink, Activity, ActivityAssessment,
           StudentCompetencyScore, TeacherObservation, ExamConfig, ExamMarks,
           TeacherMapping, HomeworkRecord, TeacherAssignment, Section, BaselineConfigV2, BaselineParticipation,
+          AuditLog,
         ];
         if (databaseUrl) {
           return {
