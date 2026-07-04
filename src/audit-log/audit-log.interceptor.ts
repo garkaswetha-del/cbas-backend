@@ -6,6 +6,7 @@ import { AuditLogService } from './audit-log.service';
 const ACTION_PATTERNS: Array<{ method: string; pattern: RegExp; action: string }> = [
   // Auth
   { method: 'POST',  pattern: /^\/users\/login$/,                           action: 'LOGIN' },
+  { method: 'POST',  pattern: /^\/users\/logout$/,                          action: 'LOGOUT' },
 
   // Appraisal
   { method: 'PATCH', pattern: /^\/appraisal\/share\//,                      action: 'APPRAISAL_SHARED' },
@@ -66,6 +67,16 @@ const ACTION_PATTERNS: Array<{ method: string; pattern: RegExp; action: string }
   // Sections
   { method: 'POST',  pattern: /^\/sections$/,                               action: 'SECTION_CREATED' },
   { method: 'DELETE',pattern: /^\/sections\//,                              action: 'SECTION_DELETED' },
+
+  // Activities (most specific first)
+  { method: 'POST',  pattern: /^\/activities\/competencies\/import/,        action: 'COMPETENCY_IMPORT' },
+  { method: 'POST',  pattern: /^\/activities\/competencies$/,               action: 'COMPETENCY_CREATED' },
+  { method: 'PUT',   pattern: /^\/activities\/competencies\//,              action: 'COMPETENCY_UPDATED' },
+  { method: 'DELETE',pattern: /^\/activities\/competencies\//,              action: 'COMPETENCY_DELETED' },
+  { method: 'POST',  pattern: /^\/activities\/[^/]+\/marks$/,               action: 'ACTIVITY_MARKS_SAVED' },
+  { method: 'PUT',   pattern: /^\/activities\/[^/]+$/,                      action: 'ACTIVITY_UPDATED' },
+  { method: 'DELETE',pattern: /^\/activities\/[^/]+$/,                      action: 'ACTIVITY_DELETED' },
+  { method: 'POST',  pattern: /^\/activities$/,                             action: 'ACTIVITY_CREATED' },
 ];
 
 // Endpoints to skip (already logged manually, or not meaningful)
@@ -83,9 +94,9 @@ function resolveAction(method: string, url: string): string | null {
 function extractUser(body: any): { user_name?: string; user_id?: string; user_role?: string } {
   if (!body || typeof body !== 'object') return {};
   return {
-    user_name: body.teacher_name   ?? body.user_name    ?? body.submitted_by
-            ?? body.observer_name  ?? body.created_by   ?? body.name ?? undefined,
-    user_id:   body.teacher_id     ?? body.user_id      ?? body.created_by_id ?? undefined,
+    user_name: body.teacher_name   ?? body.user_name      ?? body.submitted_by
+            ?? body.observer_name  ?? body.created_by_name ?? undefined,
+    user_id:   body.teacher_id     ?? body.user_id        ?? body.created_by ?? undefined,
     user_role: body.role ?? undefined,
   };
 }

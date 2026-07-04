@@ -35,6 +35,12 @@ export class UsersController {
     return this.usersService.findAll({ role, subject, grade, qualification });
   }
 
+  @Post('logout')
+  logout() {
+    // Body is consumed by AuditLogInterceptor to record who logged out
+    return { success: true };
+  }
+
   @Post('normalize-qualifications')
   normalizeQualifications() {
     return this.usersService.normalizeQualifications();
