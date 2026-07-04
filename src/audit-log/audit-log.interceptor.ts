@@ -97,7 +97,7 @@ function extractUser(body: any): { user_name?: string; user_id?: string; user_ro
     user_name: body.teacher_name   ?? body.user_name      ?? body.submitted_by
             ?? body.observer_name  ?? body.created_by_name ?? undefined,
     user_id:   body.teacher_id     ?? body.user_id        ?? body.created_by ?? undefined,
-    user_role: body.role ?? undefined,
+    user_role: body.role ?? body.user_role ?? undefined,
   };
 }
 
