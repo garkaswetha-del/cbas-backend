@@ -1,9 +1,13 @@
-import { Controller, Get, Post, Patch, Delete, Body, Param, Query } from '@nestjs/common';
+import { Controller, Get, Post, Patch, Delete, Body, Param, Query, Req } from '@nestjs/common';
 import { UsersService } from './users.service';
+import { AuditLogService } from '../audit-log/audit-log.service';
 
 @Controller('users')
 export class UsersController {
-  constructor(private readonly usersService: UsersService) {}
+  constructor(
+    private readonly usersService: UsersService,
+    private readonly auditLogService: AuditLogService,
+  ) {}
 
   @Get('stats')
   getStats() {
@@ -37,8 +41,29 @@ export class UsersController {
   }
 
   @Post('login')
-  login(@Body() body: { email: string; password: string }) {
-    return this.usersService.login(body.email, body.password);
+  async login(@Body() body: { email: string; password: string }, @Req() req: any) {
+    const ip = (req.headers['x-forwarded-for'] as string) ?? req.socket?.remoteAddress ?? '';
+    try {
+      const result = await this.usersService.login(body.email, body.password);
+      this.auditLogService.log({
+        user_id:   result.user.id,
+        user_name: result.user.name,
+        user_role: result.user.role,
+        action:    'LOGIN_SUCCESS',
+        ip_address: ip,
+        result:    'success',
+      });
+      return result;
+    } catch (e) {
+      this.auditLogService.log({
+        user_name: body.email,
+        action:    'LOGIN_FAILED',
+        ip_address: ip,
+        result:    'failure',
+        details:   { reason: e.message },
+      });
+      throw e;
+    }
   }
 
   @Post()

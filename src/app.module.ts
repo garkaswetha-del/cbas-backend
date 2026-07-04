@@ -45,6 +45,7 @@ import { BaselineParticipation } from './baseline/entities/baseline-participatio
 import { PortfolioModule } from './portfolio/portfolio.module';
 import { MemosModule } from './memos/memos.module';
 import { AuditLog } from './audit-log/entities/audit-log.entity';
+import { AuditLogModule } from './audit-log/audit-log.module';
 
 @Module({
   imports: [
@@ -110,6 +111,7 @@ import { AuditLog } from './audit-log/entities/audit-log.entity';
     SectionsModule,
     PortfolioModule,
     MemosModule,
+    AuditLogModule,
   ],
 })
 export class AppModule {}

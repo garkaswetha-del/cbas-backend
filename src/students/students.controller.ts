@@ -1,9 +1,13 @@
 import { Controller, Get, Post, Patch, Delete, Body, Param, Query } from '@nestjs/common';
 import { StudentsService } from './students.service';
+import { AuditLogService } from '../audit-log/audit-log.service';
 
 @Controller('students')
 export class StudentsController {
-  constructor(private readonly studentsService: StudentsService) {}
+  constructor(
+    private readonly studentsService: StudentsService,
+    private readonly auditLogService: AuditLogService,
+  ) {}
 
   @Get()
   findAll(
@@ -109,8 +113,21 @@ export class StudentsController {
   }
 
   @Post('bulk-import')
-  bulkImport(@Body() body: { students: any[] }) {
-    return this.studentsService.bulkImport(body.students);
+  async bulkImport(@Body() body: { students: any[]; importedBy?: string }) {
+    const result = await this.studentsService.bulkImport(body.students);
+    this.auditLogService.log({
+      user_name:     body.importedBy ?? 'Admin',
+      action:        'STUDENT_IMPORT',
+      resource_type: 'students',
+      details: {
+        created:      result.created,
+        updated:      result.updated,
+        errors_count: result.errors.length,
+        errors:       result.errors.slice(0, 10),
+      },
+      result: result.errors.length > 0 ? 'partial' : 'success',
+    });
+    return result;
   }
 
   @Post('bulk-update')
