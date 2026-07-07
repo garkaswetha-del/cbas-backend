@@ -33,6 +33,9 @@ export class TeacherObservation {
   @Column({ nullable: true })
   block_number: string;
 
+  @Column({ nullable: true })
+  lp_no: string;
+
   @Column({ default: false })
   lesson_plan_available: boolean;
 

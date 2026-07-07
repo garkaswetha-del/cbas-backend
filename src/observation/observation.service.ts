@@ -70,6 +70,7 @@ export class ObservationService implements OnModuleInit {
         users.sort((a, b) => a.name.localeCompare(b.name));
         return users.map(u => ({
           id: u.id, name: u.name, email: u.email,
+          subjects: (u.subjects || []).filter(s => s?.trim()),
           assigned_classes: gradesByTeacher[u.id] || [],
         }));
       }
@@ -77,7 +78,7 @@ export class ObservationService implements OnModuleInit {
     return this.userRepo.find({
       where: { is_active: true },
       order: { name: 'ASC' },
-      select: ['id', 'name', 'email', 'assigned_classes'],
+      select: ['id', 'name', 'email', 'assigned_classes', 'subjects'],
     });
   }
 
@@ -93,6 +94,7 @@ export class ObservationService implements OnModuleInit {
       section_observed: data.section_observed || null,
       subject_observed: data.subject_observed,
       block_number: data.block_number,
+      lp_no: data.lp_no || null,
       lesson_plan_available: data.lesson_plan_available || false,
       lesson_plan_name: data.lesson_plan_name,
       number_of_students: data.number_of_students,
