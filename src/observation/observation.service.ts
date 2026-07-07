@@ -60,10 +60,14 @@ export class ObservationService implements OnModuleInit {
       const mappings = await this.mappingRepo.find({ where: { academic_year, is_active: true } });
       if (mappings.length > 0) {
         const gradesByTeacher: Record<string, string[]> = {};
+        const sectionsByTeacher: Record<string, string[]> = {};
         mappings.forEach(m => {
           if (!gradesByTeacher[m.teacher_id]) gradesByTeacher[m.teacher_id] = [];
           if (m.grade && !gradesByTeacher[m.teacher_id].includes(m.grade))
             gradesByTeacher[m.teacher_id].push(m.grade);
+          if (!sectionsByTeacher[m.teacher_id]) sectionsByTeacher[m.teacher_id] = [];
+          if (m.section && !sectionsByTeacher[m.teacher_id].includes(m.section))
+            sectionsByTeacher[m.teacher_id].push(m.section);
         });
         const ids = Object.keys(gradesByTeacher);
         const users = await this.userRepo.findByIds(ids);
@@ -72,13 +76,14 @@ export class ObservationService implements OnModuleInit {
           id: u.id, name: u.name, email: u.email,
           subjects: (u.subjects || []).filter(s => s?.trim()),
           assigned_classes: gradesByTeacher[u.id] || [],
+          assigned_sections: sectionsByTeacher[u.id] || [],
         }));
       }
     }
     return this.userRepo.find({
       where: { is_active: true },
       order: { name: 'ASC' },
-      select: ['id', 'name', 'email', 'assigned_classes', 'subjects'],
+      select: ['id', 'name', 'email', 'assigned_classes', 'subjects', 'assigned_sections'],
     });
   }
 
