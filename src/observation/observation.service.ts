@@ -33,6 +33,11 @@ export class ObservationService implements OnModuleInit {
   async onModuleInit() {
     try {
       await this.obsRepo.query(
+        `ALTER TABLE teacher_observations ADD COLUMN IF NOT EXISTS lp_no VARCHAR`,
+      );
+    } catch { }
+    try {
+      await this.obsRepo.query(
         `ALTER TABLE teacher_observations ADD COLUMN IF NOT EXISTS teacher_id UUID`,
       );
     } catch { }
