@@ -345,6 +345,13 @@ export class StudentsService implements OnModuleInit {
     });
   }
 
+  // One-shot cleanup: TRUNCATE CASCADE wipes students + all FK-dependent tables atomically
+  async truncateAllStudents() {
+    const em = this.studentRepo.manager;
+    await em.query(`TRUNCATE TABLE students CASCADE`);
+    return { message: 'All student data truncated' };
+  }
+
   // Permanently delete — clears all dependent rows first (assessments, competency scores, enrollment)
   async deletePermanently(id: string) {
     const em = this.studentRepo.manager;

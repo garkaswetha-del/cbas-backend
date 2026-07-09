@@ -164,6 +164,11 @@ export class StudentsController {
     return this.studentsService.delete(id);
   }
 
+  @Post('admin-truncate-all')
+  async adminTruncateAll() {
+    return this.studentsService.truncateAllStudents();
+  }
+
   @Delete(':id/permanent')
   deletePermanently(@Param('id') id: string) {
     return this.studentsService.deletePermanently(id);
