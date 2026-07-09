@@ -351,6 +351,7 @@ export class StudentsService implements OnModuleInit {
     // Clear dependent tables that have FK constraints to students
     await em.query(`DELETE FROM assessments WHERE student_id = $1`, [id]);
     await em.query(`DELETE FROM competency_scores WHERE student_id = $1`, [id]);
+    await em.query(`DELETE FROM ai_outputs WHERE student_id = $1`, [id]);
     await em.query(`DELETE FROM activity_assessments WHERE student_id::text = $1`, [id]);
     await em.query(`DELETE FROM student_competency_scores WHERE student_id::text = $1`, [id]);
     await em.query(`DELETE FROM exam_marks WHERE student_id::text = $1`, [id]);
