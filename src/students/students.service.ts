@@ -2,19 +2,87 @@ import { Injectable, NotFoundException, OnModuleInit } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository, Like } from 'typeorm';
 import { Student } from './entities/student.entity/student.entity';
+import { StudentEnrollment } from './entities/student-enrollment.entity';
 
 @Injectable()
 export class StudentsService implements OnModuleInit {
   constructor(
     @InjectRepository(Student)
     private studentRepo: Repository<Student>,
+    @InjectRepository(StudentEnrollment)
+    private enrollmentRepo: Repository<StudentEnrollment>,
   ) {}
 
   async onModuleInit() {
+    // Existing column additions
+    try { await this.studentRepo.query(`ALTER TABLE students ADD COLUMN IF NOT EXISTS caste VARCHAR`); } catch {}
+
+    // Create student_enrollments table (the source of truth for per-year class/section)
     try {
-      await this.studentRepo.query(
-        `ALTER TABLE students ADD COLUMN IF NOT EXISTS caste VARCHAR`,
-      );
+      await this.studentRepo.query(`
+        CREATE TABLE IF NOT EXISTS student_enrollments (
+          id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+          student_id UUID NOT NULL REFERENCES students(id) ON DELETE RESTRICT,
+          academic_year VARCHAR NOT NULL,
+          class VARCHAR,
+          section VARCHAR,
+          created_at TIMESTAMPTZ DEFAULT NOW(),
+          UNIQUE(student_id, academic_year)
+        )
+      `);
+    } catch {}
+
+    // Fix student_id column types to UUID and add FK constraints on loose tables
+    // activity_assessments
+    try { await this.studentRepo.query(`ALTER TABLE activity_assessments ALTER COLUMN student_id TYPE UUID USING student_id::UUID`); } catch {}
+    try {
+      await this.studentRepo.query(`
+        DO $$ BEGIN
+          IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'fk_activity_assessments_student') THEN
+            ALTER TABLE activity_assessments ADD CONSTRAINT fk_activity_assessments_student
+              FOREIGN KEY (student_id) REFERENCES students(id) ON DELETE RESTRICT;
+          END IF;
+        END $$
+      `);
+    } catch {}
+
+    // student_competency_scores
+    try { await this.studentRepo.query(`ALTER TABLE student_competency_scores ALTER COLUMN student_id TYPE UUID USING student_id::UUID`); } catch {}
+    try {
+      await this.studentRepo.query(`
+        DO $$ BEGIN
+          IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'fk_student_competency_scores_student') THEN
+            ALTER TABLE student_competency_scores ADD CONSTRAINT fk_student_competency_scores_student
+              FOREIGN KEY (student_id) REFERENCES students(id) ON DELETE RESTRICT;
+          END IF;
+        END $$
+      `);
+    } catch {}
+
+    // exam_marks (nullable student_id)
+    try { await this.studentRepo.query(`ALTER TABLE exam_marks ALTER COLUMN student_id TYPE UUID USING student_id::UUID`); } catch {}
+    try {
+      await this.studentRepo.query(`
+        DO $$ BEGIN
+          IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'fk_exam_marks_student') THEN
+            ALTER TABLE exam_marks ADD CONSTRAINT fk_exam_marks_student
+              FOREIGN KEY (student_id) REFERENCES students(id) ON DELETE RESTRICT;
+          END IF;
+        END $$
+      `);
+    } catch {}
+
+    // homework_records (nullable student_id, only for parent suggestions)
+    try { await this.studentRepo.query(`ALTER TABLE homework_records ALTER COLUMN student_id TYPE UUID USING student_id::UUID`); } catch {}
+    try {
+      await this.studentRepo.query(`
+        DO $$ BEGIN
+          IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'fk_homework_records_student') THEN
+            ALTER TABLE homework_records ADD CONSTRAINT fk_homework_records_student
+              FOREIGN KEY (student_id) REFERENCES students(id) ON DELETE RESTRICT;
+          END IF;
+        END $$
+      `);
     } catch {}
   }
 
@@ -24,22 +92,34 @@ export class StudentsService implements OnModuleInit {
     section?: string;
     search?: string;
     include_inactive?: boolean;
+    academic_year?: string;
   }) {
+    const em = this.studentRepo.manager;
+
+    if (filters?.academic_year) {
+      // Historical view: join enrollments for the requested year
+      const conditions = ['e.academic_year = $1'];
+      const params: any[] = [filters.academic_year];
+      let idx = 2;
+      if (!filters.include_inactive) conditions.push('s.is_active = true');
+      if (filters.grade) { conditions.push(`LOWER(e.class) = LOWER($${idx++})`); params.push(filters.grade); }
+      if (filters.section) { conditions.push(`LOWER(e.section) = LOWER($${idx++})`); params.push(filters.section); }
+      if (filters.search) { conditions.push(`s.name ILIKE $${idx++}`); params.push(`%${filters.search}%`); }
+      return em.query(`
+        SELECT s.*, e.class AS current_class, e.section AS section
+        FROM students s
+        JOIN student_enrollments e ON e.student_id = s.id
+        WHERE ${conditions.join(' AND ')}
+        ORDER BY e.class ASC, e.section ASC, s.name ASC
+      `, params);
+    }
+
+    // Current state (no year filter — uses student.current_class cache)
     const query = this.studentRepo.createQueryBuilder('student');
-    if (!filters?.include_inactive) {
-      query.where('student.is_active = :active', { active: true });
-    }
-
-    if (filters?.grade) {
-      query.andWhere('LOWER(student.current_class) = LOWER(:grade)', { grade: filters.grade });
-    }
-    if (filters?.section) {
-      query.andWhere('LOWER(student.section) = LOWER(:section)', { section: filters.section });
-    }
-    if (filters?.search) {
-      query.andWhere('student.name ILIKE :search', { search: `%${filters.search}%` });
-    }
-
+    if (!filters?.include_inactive) query.where('student.is_active = :active', { active: true });
+    if (filters?.grade) query.andWhere('LOWER(student.current_class) = LOWER(:grade)', { grade: filters.grade });
+    if (filters?.section) query.andWhere('LOWER(student.section) = LOWER(:section)', { section: filters.section });
+    if (filters?.search) query.andWhere('student.name ILIKE :search', { search: `%${filters.search}%` });
     return query.orderBy('student.current_class', 'ASC')
       .addOrderBy('student.section', 'ASC')
       .addOrderBy('student.name', 'ASC')
@@ -148,9 +228,11 @@ export class StudentsService implements OnModuleInit {
 
   // Bulk import students — upsert: create new, update all fields on existing
   // Lookup priority: admission_no → name+section → name+current_class+section
-  // current_class and section ARE updated (previously they were not, causing null current_class after re-import)
-  async bulkImport(students: Partial<Student>[]) {
+  // If academic_year is provided, also upserts a student_enrollments row for that year
+  async bulkImport(students: Partial<Student>[], academic_year?: string) {
     const results = { created: 0, updated: 0, errors: [] as string[] };
+    const em = this.studentRepo.manager;
+
     for (const s of students) {
       try {
         let existing: Student | null = null;
@@ -162,7 +244,7 @@ export class StudentsService implements OnModuleInit {
           });
         }
 
-        // 2. Fall back to name + section (handles case where current_class was previously null)
+        // 2. Fall back to name + section
         if (!existing && s.name?.trim() && s.section?.trim()) {
           existing = await this.studentRepo.findOne({
             where: { name: s.name.trim(), section: s.section.trim(), is_active: true }
@@ -176,9 +258,11 @@ export class StudentsService implements OnModuleInit {
           });
         }
 
+        let studentId: string;
         if (!existing) {
-          await this.studentRepo.save(this.studentRepo.create(s));
+          const created = await this.studentRepo.save(this.studentRepo.create(s));
           results.created++;
+          studentId = created.id;
         } else {
           const patch: Partial<Student> = {};
           const fields: (keyof Student)[] = [
@@ -191,6 +275,17 @@ export class StudentsService implements OnModuleInit {
           for (const f of fields) { if (s[f]) (patch as any)[f] = s[f]; }
           if (Object.keys(patch).length > 0) await this.studentRepo.update(existing.id, patch);
           results.updated++;
+          studentId = existing.id;
+        }
+
+        // Upsert enrollment row so year-based history is preserved
+        if (academic_year && s.current_class) {
+          await em.query(`
+            INSERT INTO student_enrollments (id, student_id, academic_year, class, section, created_at)
+            VALUES (gen_random_uuid(), $1, $2, $3, $4, NOW())
+            ON CONFLICT (student_id, academic_year) DO UPDATE
+              SET class = EXCLUDED.class, section = EXCLUDED.section
+          `, [studentId, academic_year, s.current_class, s.section || null]);
         }
       } catch (e) {
         results.errors.push(`${s.name}: ${e.message}`);

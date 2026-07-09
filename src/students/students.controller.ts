@@ -15,8 +15,9 @@ export class StudentsController {
     @Query('section') section?: string,
     @Query('search') search?: string,
     @Query('include_inactive') include_inactive?: string,
+    @Query('academic_year') academic_year?: string,
   ) {
-    return this.studentsService.findAll({ grade, section, search, include_inactive: include_inactive === 'true' });
+    return this.studentsService.findAll({ grade, section, search, include_inactive: include_inactive === 'true', academic_year });
   }
 
   @Get('stats')
@@ -113,8 +114,8 @@ export class StudentsController {
   }
 
   @Post('bulk-import')
-  async bulkImport(@Body() body: { students: any[]; importedBy?: string }) {
-    const result = await this.studentsService.bulkImport(body.students);
+  async bulkImport(@Body() body: { students: any[]; importedBy?: string; academic_year?: string }) {
+    const result = await this.studentsService.bulkImport(body.students, body.academic_year);
     this.auditLogService.log({
       user_name:     body.importedBy ?? 'Admin',
       action:        'STUDENT_IMPORT',
