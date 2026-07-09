@@ -345,8 +345,17 @@ export class StudentsService implements OnModuleInit {
     });
   }
 
-  // Permanently delete
+  // Permanently delete — clears all dependent rows first (assessments, competency scores, enrollment)
   async deletePermanently(id: string) {
+    const em = this.studentRepo.manager;
+    // Clear dependent tables that have FK constraints to students
+    await em.query(`DELETE FROM assessments WHERE student_id = $1`, [id]);
+    await em.query(`DELETE FROM competency_scores WHERE student_id = $1`, [id]);
+    await em.query(`DELETE FROM activity_assessments WHERE student_id::text = $1`, [id]);
+    await em.query(`DELETE FROM student_competency_scores WHERE student_id::text = $1`, [id]);
+    await em.query(`DELETE FROM exam_marks WHERE student_id::text = $1`, [id]);
+    await em.query(`DELETE FROM homework_records WHERE student_id::text = $1`, [id]);
+    await em.query(`DELETE FROM student_enrollments WHERE student_id = $1`, [id]);
     await this.studentRepo.delete(id);
     return { message: 'Student permanently deleted' };
   }
