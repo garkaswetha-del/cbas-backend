@@ -193,14 +193,26 @@ export class PasaService {
   }
 
   async getMarksForEntry(exam_config_id: string, grade: string, section: string) {
-    // Get all students in section - use case-insensitive query
-    const students = await this.studentRepo
-      .createQueryBuilder('s')
-      .where('LOWER(s.current_class) = LOWER(:grade)', { grade })
-      .andWhere('LOWER(s.section) = LOWER(:section)', { section })
-      .andWhere('s.is_active = true')
-      .orderBy('s.name', 'ASC')
-      .getMany();
+    // Derive academic_year from the exam config so we can join enrollments
+    const config = await this.configRepo.findOne({ where: { id: exam_config_id } });
+    const academic_year = (config as any)?.academic_year;
+    let students: any[];
+    if (academic_year) {
+      students = await this.studentRepo.manager.query(`
+        SELECT s.* FROM students s
+        INNER JOIN student_enrollments e ON e.student_id = s.id
+        WHERE LOWER(e.class) = LOWER($1) AND LOWER(e.section) = LOWER($2) AND e.academic_year = $3
+        ORDER BY s.name ASC
+      `, [grade, section, academic_year]);
+    } else {
+      students = await this.studentRepo
+        .createQueryBuilder('s')
+        .where('LOWER(s.current_class) = LOWER(:grade)', { grade })
+        .andWhere('LOWER(s.section) = LOWER(:section)', { section })
+        .andWhere('s.is_active = true')
+        .orderBy('s.name', 'ASC')
+        .getMany();
+    }
 
     // Get existing marks — use case-insensitive lookup to match student query
     const marks = await this.marksRepo.createQueryBuilder('m')

@@ -147,6 +147,11 @@ export class StudentsController {
     return this.studentsService.create(body);
   }
 
+  @Get(':id/portfolio')
+  getStudentPortfolio(@Param('id') id: string) {
+    return this.studentsService.getStudentPortfolio(id);
+  }
+
   @Get(':id')
   findOne(@Param('id') id: string) {
     return this.studentsService.findOne(id);

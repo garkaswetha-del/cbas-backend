@@ -357,6 +357,8 @@ export class StudentsService implements OnModuleInit {
     await em.query(`DELETE FROM exam_marks WHERE student_id::text = $1`, [id]);
     await em.query(`DELETE FROM homework_records WHERE student_id::text = $1`, [id]);
     await em.query(`DELETE FROM student_enrollments WHERE student_id = $1`, [id]);
+    // baseline_assessments uses entity_id as text (polymorphic — no real FK possible)
+    await em.query(`DELETE FROM baseline_assessments WHERE entity_type = 'student' AND entity_id = $1::text`, [id]);
     await this.studentRepo.delete(id);
     return { message: 'Student permanently deleted' };
   }
@@ -548,6 +550,23 @@ export class StudentsService implements OnModuleInit {
     if (graduation_year) where.graduation_year = graduation_year;
     const alumni = await this.studentRepo.find({ where, order: { name: 'ASC' } });
     return { total: alumni.length, alumni };
+  }
+
+  // Get full portfolio for a student (all modules — for graduation archive export)
+  async getStudentPortfolio(id: string) {
+    const em = this.studentRepo.manager;
+    const student = await this.studentRepo.findOne({ where: { id } });
+    if (!student) throw new NotFoundException('Student not found');
+
+    const [enrollments, baselineRows, examRows, activityRows, competencyRows] = await Promise.all([
+      em.query(`SELECT academic_year, class, section FROM student_enrollments WHERE student_id = $1 ORDER BY academic_year ASC`, [id]),
+      em.query(`SELECT academic_year, round, grade, section, overall_score, literacy_total, numeracy_total FROM baseline_assessments WHERE entity_type = 'student' AND entity_id = $1::text ORDER BY academic_year, round ASC`, [id]),
+      em.query(`SELECT academic_year, exam_type, subject, grade, section, total_obtained, total_max, percentage FROM exam_marks WHERE student_id = $1 AND is_active = true ORDER BY academic_year, exam_type ASC`, [id]),
+      em.query(`SELECT aa.academic_year, aa.grade, aa.section, aa.percentage, aa.level, a.name AS activity_name, a.subject FROM activity_assessments aa LEFT JOIN activities a ON a.id = aa.activity_id WHERE aa.student_id = $1 AND aa.is_active = true ORDER BY aa.academic_year ASC`, [id]),
+      em.query(`SELECT academic_year, subject, competency_code, best_score, best_rating FROM student_competency_scores WHERE student_id = $1 ORDER BY academic_year, subject ASC`, [id]),
+    ]);
+
+    return { student, enrollments, baselineRows, examRows, activityRows, competencyRows };
   }
 
   // Get all distinct academic years that have enrollment data

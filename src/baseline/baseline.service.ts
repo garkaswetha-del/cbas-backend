@@ -261,13 +261,12 @@ export class BaselineService {
 
   // ── Get section baseline for display ───────────────────────────
   async getSectionBaseline(grade: string, section: string, academic_year: string, round: string) {
-    const students = await this.studentRepo
-      .createQueryBuilder('student')
-      .where('LOWER(student.current_class) = LOWER(:grade)', { grade })
-      .andWhere('LOWER(student.section) = LOWER(:section)', { section })
-      .andWhere('student.is_active = :active', { active: true })
-      .orderBy('student.name', 'ASC')
-      .getMany();
+    const students = await this.studentRepo.manager.query(`
+      SELECT s.* FROM students s
+      INNER JOIN student_enrollments e ON e.student_id = s.id
+      WHERE LOWER(e.class) = LOWER($1) AND LOWER(e.section) = LOWER($2) AND e.academic_year = $3
+      ORDER BY s.name ASC
+    `, [grade, section, academic_year]);
 
     const assessments = await this.baselineRepo
       .createQueryBuilder('ba')
@@ -294,10 +293,17 @@ export class BaselineService {
     const participatingGrades = participation?.participating_grades ?? [];
     let totalStudents: number;
     if (participatingGrades.length > 0) {
-      const allStudents = await this.studentRepo.find({ where: { is_active: true } });
-      totalStudents = allStudents.filter(s => participatingGrades.includes(s.current_class)).length;
+      const rows = await this.studentRepo.manager.query(
+        `SELECT COUNT(DISTINCT e.student_id) AS count FROM student_enrollments e WHERE e.academic_year = $1 AND e.class = ANY($2::text[])`,
+        [academic_year, participatingGrades]
+      );
+      totalStudents = parseInt(rows[0]?.count || '0');
     } else {
-      totalStudents = await this.studentRepo.count({ where: { is_active: true } });
+      const rows = await this.studentRepo.manager.query(
+        `SELECT COUNT(DISTINCT e.student_id) AS count FROM student_enrollments e WHERE e.academic_year = $1`,
+        [academic_year]
+      );
+      totalStudents = parseInt(rows[0]?.count || '0');
     }
     const assessed = assessments.length;
     const avg = (arr: number[]) => arr.length ? +(arr.reduce((a, b) => a + b, 0) / arr.length).toFixed(1) : 0;
@@ -750,13 +756,12 @@ export class BaselineService {
 
   // ── Section rounds (teacher dashboard entry) ───────────────────
   async getSectionRounds(grade: string, section: string, academic_year: string) {
-    const students = await this.studentRepo
-      .createQueryBuilder('student')
-      .where('LOWER(student.current_class) = LOWER(:grade)', { grade })
-      .andWhere('LOWER(student.section) = LOWER(:section)', { section })
-      .andWhere('student.is_active = :active', { active: true })
-      .orderBy('student.name', 'ASC')
-      .getMany();
+    const students = await this.studentRepo.manager.query(`
+      SELECT s.* FROM students s
+      INNER JOIN student_enrollments e ON e.student_id = s.id
+      WHERE LOWER(e.class) = LOWER($1) AND LOWER(e.section) = LOWER($2) AND e.academic_year = $3
+      ORDER BY s.name ASC
+    `, [grade, section, academic_year]);
 
     const assessments = await this.baselineRepo
       .createQueryBuilder('ba')

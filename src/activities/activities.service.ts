@@ -235,13 +235,12 @@ export class ActivitiesService {
   async getMarksForActivity(activity_id: string, academic_year: string) {
     const activity = await this.activityRepo.findOne({ where: { id: activity_id } });
     if (!activity) return null;
-    const students = await this.studentRepo
-      .createQueryBuilder('student')
-      .where('LOWER(student.current_class) = LOWER(:grade)', { grade: activity.grade })
-      .andWhere('LOWER(student.section) = LOWER(:section)', { section: activity.section })
-      .andWhere('student.is_active = :active', { active: true })
-      .orderBy('student.name', 'ASC')
-      .getMany();
+    const students = await this.studentRepo.manager.query(`
+      SELECT s.* FROM students s
+      INNER JOIN student_enrollments e ON e.student_id = s.id
+      WHERE LOWER(e.class) = LOWER($1) AND LOWER(e.section) = LOWER($2) AND e.academic_year = $3
+      ORDER BY s.name ASC
+    `, [activity.grade, activity.section, academic_year]);
     const assessments = await this.assessmentRepo.find({ where: { activity_id, academic_year } });
     const competencies = await this.competencyRepo.find({
       where: { is_active: true },
@@ -358,13 +357,12 @@ export class ActivitiesService {
       (a.extra_subjects || []).some((s: string) => s === subject || s === subjectNorm)
     );
 
-    const students = await this.studentRepo
-      .createQueryBuilder('s')
-      .where('LOWER(s.current_class) = LOWER(:grade)', { grade })
-      .andWhere('LOWER(s.section) = LOWER(:section)', { section })
-      .andWhere('s.is_active = true')
-      .orderBy('s.name', 'ASC')
-      .getMany();
+    const students = await this.studentRepo.manager.query(`
+      SELECT s.* FROM students s
+      INNER JOIN student_enrollments e ON e.student_id = s.id
+      WHERE LOWER(e.class) = LOWER($1) AND LOWER(e.section) = LOWER($2) AND e.academic_year = $3
+      ORDER BY s.name ASC
+    `, [grade, section, academic_year]);
 
     const activityIds = filtered.map(a => a.id);
     const assessments = activityIds.length
@@ -573,10 +571,12 @@ export class ActivitiesService {
   }
 
   async getSectionDashboard(grade: string, section: string, academic_year: string) {
-    const students = await this.studentRepo.find({
-      where: { current_class: grade, section, is_active: true },
-      order: { name: 'ASC' },
-    });
+    const students = await this.studentRepo.manager.query(`
+      SELECT s.* FROM students s
+      INNER JOIN student_enrollments e ON e.student_id = s.id
+      WHERE LOWER(e.class) = LOWER($1) AND LOWER(e.section) = LOWER($2) AND e.academic_year = $3
+      ORDER BY s.name ASC
+    `, [grade, section, academic_year]);
     const scores = await this.scoreRepo.find({ where: { grade, section, academic_year } });
 
     const competencyIds = [...new Set(scores.map(s => s.competency_id))];
@@ -654,9 +654,12 @@ export class ActivitiesService {
     const scores = await this.scoreRepo
       .createQueryBuilder('s').where('LOWER(s.grade) = LOWER(:grade)', { grade })
       .andWhere('s.academic_year = :ay', { ay: academic_year }).getMany();
-    const students = await this.studentRepo
-      .createQueryBuilder('s').where('LOWER(s.current_class) = LOWER(:grade)', { grade })
-      .andWhere('s.is_active = true').getMany();
+    const students = await this.studentRepo.manager.query(`
+      SELECT s.* FROM students s
+      INNER JOIN student_enrollments e ON e.student_id = s.id
+      WHERE LOWER(e.class) = LOWER($1) AND e.academic_year = $2
+      ORDER BY s.name ASC
+    `, [grade, academic_year]);
 
     // Section averages
     const sectionMap: Record<string, any[]> = {};
@@ -902,9 +905,12 @@ export class ActivitiesService {
 
   // ── SECTION COVERAGE ─────────────────────────────────────────
   async getSectionCoverage(grade: string, section: string, academic_year: string) {
-    const students = await this.studentRepo
-      .createQueryBuilder('s').where('LOWER(s.current_class) = LOWER(:grade)', { grade })
-      .andWhere('LOWER(s.section) = LOWER(:section)', { section }).andWhere('s.is_active = true').getMany();
+    const students = await this.studentRepo.manager.query(`
+      SELECT s.* FROM students s
+      INNER JOIN student_enrollments e ON e.student_id = s.id
+      WHERE LOWER(e.class) = LOWER($1) AND LOWER(e.section) = LOWER($2) AND e.academic_year = $3
+      ORDER BY s.name ASC
+    `, [grade, section, academic_year]);
     const allCompetencies = await this.competencyRepo
       .createQueryBuilder('c').where('LOWER(c.grade) = LOWER(:grade)', { grade }).andWhere('c.is_active = true').getMany();
     const activities = await this.activityRepo
