@@ -25,6 +25,11 @@ export class StudentsController {
     return this.studentsService.getStats();
   }
 
+  @Get('academic-years')
+  getAcademicYears() {
+    return this.studentsService.getAcademicYears();
+  }
+
   @Get('tc-register')
   getTCRegister() {
     return this.studentsService.getTCRegister();
@@ -79,6 +84,7 @@ export class StudentsController {
   promoteStudentsBatch(@Body() body: {
     from_grade: string;
     assignments: { student_id: string; to_section: string }[];
+    to_year?: string;
   }) {
     return this.studentsService.promoteStudentsBatch(body);
   }

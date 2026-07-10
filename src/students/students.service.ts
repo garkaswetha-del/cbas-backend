@@ -432,16 +432,27 @@ export class StudentsService implements OnModuleInit {
   }
 
   // Execute batch promotion: each student can go to a different target section
+  // to_year: the academic year students are being promoted INTO (e.g. "2026-27")
   async promoteStudentsBatch(data: {
     from_grade: string;
     assignments: { student_id: string; to_section: string }[];
+    to_year?: string;
   }) {
     const next = this.nextGrade(data.from_grade);
     if (!next) return { error: `${data.from_grade} is the final grade. Cannot promote further.` };
 
+    const em = this.studentRepo.manager;
     const sectionCounts: Record<string, number> = {};
     for (const { student_id, to_section } of data.assignments) {
       await this.studentRepo.update(student_id, { current_class: next, section: to_section });
+      if (data.to_year) {
+        await em.query(`
+          INSERT INTO student_enrollments (id, student_id, academic_year, class, section, created_at)
+          VALUES (gen_random_uuid(), $1, $2, $3, $4, NOW())
+          ON CONFLICT (student_id, academic_year) DO UPDATE
+            SET class = EXCLUDED.class, section = EXCLUDED.section
+        `, [student_id, data.to_year, next, to_section]);
+      }
       sectionCounts[to_section] = (sectionCounts[to_section] || 0) + 1;
     }
     return {
@@ -537,6 +548,19 @@ export class StudentsService implements OnModuleInit {
     if (graduation_year) where.graduation_year = graduation_year;
     const alumni = await this.studentRepo.find({ where, order: { name: 'ASC' } });
     return { total: alumni.length, alumni };
+  }
+
+  // Get all distinct academic years that have enrollment data
+  async getAcademicYears(): Promise<string[]> {
+    try {
+      const em = this.studentRepo.manager;
+      const rows: any[] = await em.query(
+        `SELECT DISTINCT academic_year FROM student_enrollments ORDER BY academic_year ASC`
+      );
+      return rows.map(r => r.academic_year);
+    } catch {
+      return [];
+    }
   }
 
   // Get stats
