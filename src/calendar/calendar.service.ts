@@ -119,12 +119,17 @@ export class CalendarService implements OnModuleInit {
     title: string; event_type: string; category: string;
     default_mmdd?: string | null; multi_day?: boolean;
   }) {
+    const orderRes = await this.dataSource.query(
+      `SELECT COALESCE(MAX(display_order), 0) + 1 AS next_order FROM calendar_templates WHERE category = $1`,
+      [data.category.trim()],
+    );
+    const nextOrder = orderRes[0].next_order ?? 1;
     const rows = await this.dataSource.query(
       `INSERT INTO calendar_templates (title, event_type, category, default_mmdd, multi_day, display_order)
-       VALUES ($1,$2,$3,$4,$5, (SELECT COALESCE(MAX(display_order),0)+1 FROM calendar_templates WHERE category=$3))
+       VALUES ($1, $2, $3, $4, $5, $6)
        RETURNING *`,
       [data.title.trim(), data.event_type, data.category.trim(),
-       data.default_mmdd || null, data.multi_day ?? false],
+       data.default_mmdd || null, data.multi_day ?? false, nextOrder],
     );
     return rows[0];
   }
