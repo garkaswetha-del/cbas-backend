@@ -48,6 +48,12 @@ import { MemosModule } from './memos/memos.module';
 import { AuditLog } from './audit-log/entities/audit-log.entity';
 import { AuditLogModule } from './audit-log/audit-log.module';
 import { AuditLogInterceptor } from './audit-log/audit-log.interceptor';
+import { Teacher } from './substitution/entities/teacher.entity';
+import { TimetablePeriod } from './substitution/entities/timetable-period.entity';
+import { PermanentExceptionTeacher } from './substitution/entities/permanent-exception-teacher.entity';
+import { DailyAbsenceRecord } from './substitution/entities/daily-absence-record.entity';
+import { SubstitutionModule } from './substitution/substitution.module';
+import { CalendarModule } from './calendar/calendar.module';
 
 @Module({
   imports: [
@@ -63,6 +69,7 @@ import { AuditLogInterceptor } from './audit-log/audit-log.interceptor';
           StudentCompetencyScore, TeacherObservation, ExamConfig, ExamMarks,
           TeacherMapping, HomeworkRecord, TeacherAssignment, Section, BaselineConfigV2, BaselineParticipation,
           AuditLog,
+          Teacher, TimetablePeriod, PermanentExceptionTeacher, DailyAbsenceRecord,
         ];
         if (databaseUrl) {
           return {
@@ -115,6 +122,8 @@ import { AuditLogInterceptor } from './audit-log/audit-log.interceptor';
     PortfolioModule,
     MemosModule,
     AuditLogModule,
+    SubstitutionModule,
+    CalendarModule,
   ],
   providers: [
     { provide: APP_INTERCEPTOR, useClass: AuditLogInterceptor },
