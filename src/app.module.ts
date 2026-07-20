@@ -54,6 +54,7 @@ import { PermanentExceptionTeacher } from './substitution/entities/permanent-exc
 import { DailyAbsenceRecord } from './substitution/entities/daily-absence-record.entity';
 import { SubstitutionModule } from './substitution/substitution.module';
 import { CalendarModule } from './calendar/calendar.module';
+import { SowModule } from './sow/sow.module';
 
 @Module({
   imports: [
@@ -124,6 +125,7 @@ import { CalendarModule } from './calendar/calendar.module';
     AuditLogModule,
     SubstitutionModule,
     CalendarModule,
+    SowModule,
   ],
   providers: [
     { provide: APP_INTERCEPTOR, useClass: AuditLogInterceptor },
