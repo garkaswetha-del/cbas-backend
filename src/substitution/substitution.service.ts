@@ -5,6 +5,7 @@ import { Teacher } from './entities/teacher.entity';
 import { TimetablePeriod } from './entities/timetable-period.entity';
 import { PermanentExceptionTeacher } from './entities/permanent-exception-teacher.entity';
 import { AbsenceStatus, DailyAbsenceRecord } from './entities/daily-absence-record.entity';
+import { SubstitutionLog } from './entities/substitution-log.entity';
 import { TimetableParserService } from './timetable-parser.service';
 import { ValidationService, PeriodRecord, TeacherProfile } from './validation.service';
 
@@ -15,9 +16,24 @@ export class SubstitutionService {
     @InjectRepository(TimetablePeriod) private periodRepo: Repository<TimetablePeriod>,
     @InjectRepository(PermanentExceptionTeacher) private exceptionRepo: Repository<PermanentExceptionTeacher>,
     @InjectRepository(DailyAbsenceRecord) private absenceRepo: Repository<DailyAbsenceRecord>,
+    @InjectRepository(SubstitutionLog) private logRepo: Repository<SubstitutionLog>,
     private readonly parser: TimetableParserService,
     private readonly validation: ValidationService,
   ) {}
+
+  // Minimum grade distance between a period's grades and a teacher's grade profile.
+  // Returns 0 if same grade, 1 if one grade apart, etc. 999 if either set is empty.
+  private minGradeDistance(periodGrades: Set<number>, teacherGrades: Set<number>): number {
+    if (periodGrades.size === 0 || teacherGrades.size === 0) return 999;
+    let min = Infinity;
+    for (const pg of periodGrades) {
+      for (const tg of teacherGrades) {
+        const d = Math.abs(pg - tg);
+        if (d < min) min = d;
+      }
+    }
+    return min;
+  }
 
   // Upload + parse a timetable PDF, replacing the currently active batch
   async uploadTimetable(fileBuffer: Buffer, fileName: string) {
@@ -133,17 +149,19 @@ export class SubstitutionService {
       relations: ['teacher'],
     });
 
+    // ── Hard constraint setup ─────────────────────────────────────────────────
     const activeExceptions = await this.exceptionRepo.find({ where: { is_active: true } });
     const permanentExceptionIds = activeExceptions.map((e) => e.teacher_id);
+    // Rules 2, 3, 4 — excluded from candidacy entirely
     const excludedIds = new Set([...absentTeacherIds, ...permanentExceptionIds, ...tempUnavailableIds]);
 
-    // Map: "teacherId:day:period" → period record (for fast free-slot lookup)
+    // Rule 1 — fast free-slot lookup: "teacherId:day:period" → period record
     const periodMap = new Map<string, TimetablePeriod>();
     for (const p of activePeriods) {
       periodMap.set(`${p.teacher_id}:${p.day}:${p.period}`, p);
     }
 
-    // Build grade/class profiles per teacher (for matching quality scoring)
+    // ── Grade/class profiles (rules 5 & 6) ───────────────────────────────────
     const profiles = new Map<string, { grades: Set<number>; classes: Set<string> }>();
     for (const p of activePeriods) {
       if (p.period_type !== 'ACADEMIC') continue;
@@ -156,10 +174,36 @@ export class SubstitutionService {
     const allTeacherIds = [...new Set(activePeriods.map((p) => p.teacher_id))];
     const candidateIds = allTeacherIds.filter((id) => !excludedIds.has(id));
 
-    // Track how many substitute slots each candidate has been given today (load balance)
-    const assignmentCount = new Map<string, number>();
-    for (const id of candidateIds) assignmentCount.set(id, 0);
+    // ── Rule 7 — load balancing: term history (last 90 days) ─────────────────
+    const termStart = new Date();
+    termStart.setDate(termStart.getDate() - 90);
+    const termStartStr = termStart.toISOString().slice(0, 10);
+    const historyCounts = await this.logRepo
+      .createQueryBuilder('l')
+      .select('l.substitute_teacher_id', 'tid')
+      .addSelect('COUNT(*)', 'cnt')
+      .where('l.date >= :termStart', { termStart: termStartStr })
+      .groupBy('l.substitute_teacher_id')
+      .getRawMany();
+    const historyMap = new Map<string, number>(
+      historyCounts.map((r) => [r.tid, parseInt(r.cnt, 10)]),
+    );
 
+    // ── Rules 8 & 9 — today's existing log (for consecutive + concentration) ──
+    const todayLog = await this.logRepo.find({ where: { date } });
+    // teacher_id → set of periods already assigned today (from previous runs)
+    const todayLogPeriods = new Map<string, Set<number>>();
+    for (const log of todayLog) {
+      if (!todayLogPeriods.has(log.substitute_teacher_id)) {
+        todayLogPeriods.set(log.substitute_teacher_id, new Set());
+      }
+      todayLogPeriods.get(log.substitute_teacher_id)!.add(log.period);
+    }
+
+    // teacher_id → set of periods assigned in THIS run (built up as we go)
+    const runPeriods = new Map<string, Set<number>>();
+
+    // ── Allocation loop ───────────────────────────────────────────────────────
     const assignments: Array<{
       period: number;
       absent_teacher_id: string;
@@ -176,10 +220,11 @@ export class SubstitutionService {
         .filter((p) => p.teacher_id === absentId && p.day === (day as any) && p.raw !== 'FREE')
         .sort((a, b) => a.period - b.period);
 
-      const absentTeacherName = activePeriods.find((p) => p.teacher_id === absentId)?.teacher?.name ?? absentId;
+      const absentTeacherName =
+        activePeriods.find((p) => p.teacher_id === absentId)?.teacher?.name ?? absentId;
 
       for (const p of absentPeriods) {
-        // Candidates who are FREE at this period
+        // Rule 1: must be free at this (day, period)
         const free = candidateIds.filter((cid) => {
           const cp = periodMap.get(`${cid}:${day}:${p.period}`);
           return cp && cp.raw === 'FREE';
@@ -187,14 +232,10 @@ export class SubstitutionService {
 
         if (free.length === 0) {
           assignments.push({
-            period: p.period,
-            absent_teacher_id: absentId,
+            period: p.period, absent_teacher_id: absentId,
             absent_teacher_name: absentTeacherName,
-            substitute_id: null,
-            substitute_name: null,
-            grades: p.grades ?? [],
-            classes: p.classes ?? [],
-            raw: p.raw,
+            substitute_id: null, substitute_name: null,
+            grades: p.grades ?? [], classes: p.classes ?? [], raw: p.raw,
           });
           continue;
         }
@@ -202,40 +243,80 @@ export class SubstitutionService {
         const periodGrades = new Set((p.grades ?? []).map(Number));
         const periodClasses = new Set(p.classes ?? []);
 
-        // Score: grade match = 2, class match = 1, minus 0.1 per existing assignment (load balance)
         const scored = free.map((cid) => {
           const prof = profiles.get(cid) ?? { grades: new Set<number>(), classes: new Set<string>() };
-          const gradeScore = [...periodGrades].some((g) => prof.grades.has(g)) ? 2 : 0;
+
+          // Rules 5 & 6: grade proximity score (0 = 4+ grades away, up to 2 = same grade)
+          const dist = this.minGradeDistance(periodGrades, prof.grades);
+          const gradeScore = periodGrades.size > 0 ? Math.max(0, 2 - dist * 0.5) : 0;
+
+          // Class match bonus
           const classScore = [...periodClasses].some((c) => prof.classes.has(c)) ? 1 : 0;
-          const loadPenalty = (assignmentCount.get(cid) ?? 0) * 0.1;
-          return { cid, score: gradeScore + classScore - loadPenalty };
+
+          // Rule 7: term history penalty (−0.05 per past substitution this term)
+          const historyPenalty = (historyMap.get(cid) ?? 0) * 0.05;
+
+          // All periods this teacher is doing today (log + current run)
+          const allTodayPeriods = new Set([
+            ...(todayLogPeriods.get(cid) ?? new Set()),
+            ...(runPeriods.get(cid) ?? new Set()),
+          ]);
+
+          // Rule 9: today concentration penalty (−0.3 per assignment already today)
+          const concentrationPenalty = allTodayPeriods.size * 0.3;
+
+          // Rule 8: consecutive period penalty (−0.5 if adjacent period already assigned)
+          const consecutivePenalty =
+            allTodayPeriods.has(p.period - 1) || allTodayPeriods.has(p.period + 1) ? 0.5 : 0;
+
+          return {
+            cid,
+            score: gradeScore + classScore - historyPenalty - concentrationPenalty - consecutivePenalty,
+          };
         });
 
         scored.sort((a, b) => b.score - a.score);
         const best = scored[0];
 
-        assignmentCount.set(best.cid, (assignmentCount.get(best.cid) ?? 0) + 1);
+        // Track this assignment for Rules 8 & 9 in subsequent periods
+        if (!runPeriods.has(best.cid)) runPeriods.set(best.cid, new Set());
+        runPeriods.get(best.cid)!.add(p.period);
 
-        const subName = activePeriods.find((sp) => sp.teacher_id === best.cid)?.teacher?.name ?? best.cid;
+        const subName =
+          activePeriods.find((sp) => sp.teacher_id === best.cid)?.teacher?.name ?? best.cid;
 
         assignments.push({
-          period: p.period,
-          absent_teacher_id: absentId,
+          period: p.period, absent_teacher_id: absentId,
           absent_teacher_name: absentTeacherName,
-          substitute_id: best.cid,
-          substitute_name: subName,
-          grades: p.grades ?? [],
-          classes: p.classes ?? [],
-          raw: p.raw,
+          substitute_id: best.cid, substitute_name: subName,
+          grades: p.grades ?? [], classes: p.classes ?? [], raw: p.raw,
         });
       }
     }
 
-    assignments.sort((a, b) => a.period - b.period || a.absent_teacher_name.localeCompare(b.absent_teacher_name));
+    assignments.sort(
+      (a, b) => a.period - b.period || a.absent_teacher_name.localeCompare(b.absent_teacher_name),
+    );
 
-    const unresolved = assignments.filter((a) => !a.substitute_id);
+    // ── Persist to substitution_log (replace today's entries for these absences) ──
+    for (const absentId of absentTeacherIds) {
+      await this.logRepo.delete({ date, absent_teacher_id: absentId });
+    }
+    const logsToSave = assignments
+      .filter((a) => a.substitute_id !== null)
+      .map((a) =>
+        this.logRepo.create({
+          substitute_teacher_id: a.substitute_id!,
+          absent_teacher_id: a.absent_teacher_id,
+          date, day,
+          period: a.period,
+          grades: a.grades,
+          classes: a.classes,
+        }),
+      );
+    if (logsToSave.length > 0) await this.logRepo.save(logsToSave);
 
-    return { assignments, unresolved_count: unresolved.length };
+    return { assignments, unresolved_count: assignments.filter((a) => !a.substitute_id).length };
   }
 
   async validate(
