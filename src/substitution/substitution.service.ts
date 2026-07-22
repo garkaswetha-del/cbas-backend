@@ -122,6 +122,122 @@ export class SubstitutionService {
     await this.exceptionRepo.update({ teacher_id: teacherId }, { is_active: false });
   }
 
+  async allocate(
+    day: string,
+    date: string,
+    absentTeacherIds: string[],
+    tempUnavailableIds: string[],
+  ) {
+    const activePeriods = await this.periodRepo.find({
+      where: { is_active: true },
+      relations: ['teacher'],
+    });
+
+    const activeExceptions = await this.exceptionRepo.find({ where: { is_active: true } });
+    const permanentExceptionIds = activeExceptions.map((e) => e.teacher_id);
+    const excludedIds = new Set([...absentTeacherIds, ...permanentExceptionIds, ...tempUnavailableIds]);
+
+    // Map: "teacherId:day:period" → period record (for fast free-slot lookup)
+    const periodMap = new Map<string, TimetablePeriod>();
+    for (const p of activePeriods) {
+      periodMap.set(`${p.teacher_id}:${p.day}:${p.period}`, p);
+    }
+
+    // Build grade/class profiles per teacher (for matching quality scoring)
+    const profiles = new Map<string, { grades: Set<number>; classes: Set<string> }>();
+    for (const p of activePeriods) {
+      if (p.period_type !== 'ACADEMIC') continue;
+      if (!profiles.has(p.teacher_id)) profiles.set(p.teacher_id, { grades: new Set(), classes: new Set() });
+      const prof = profiles.get(p.teacher_id)!;
+      (p.grades ?? []).forEach((g) => prof.grades.add(Number(g)));
+      (p.classes ?? []).forEach((c) => prof.classes.add(c));
+    }
+
+    const allTeacherIds = [...new Set(activePeriods.map((p) => p.teacher_id))];
+    const candidateIds = allTeacherIds.filter((id) => !excludedIds.has(id));
+
+    // Track how many substitute slots each candidate has been given today (load balance)
+    const assignmentCount = new Map<string, number>();
+    for (const id of candidateIds) assignmentCount.set(id, 0);
+
+    const assignments: Array<{
+      period: number;
+      absent_teacher_id: string;
+      absent_teacher_name: string;
+      substitute_id: string | null;
+      substitute_name: string | null;
+      grades: number[];
+      classes: string[];
+      raw: string;
+    }> = [];
+
+    for (const absentId of absentTeacherIds) {
+      const absentPeriods = activePeriods
+        .filter((p) => p.teacher_id === absentId && p.day === (day as any) && p.raw !== 'FREE')
+        .sort((a, b) => a.period - b.period);
+
+      const absentTeacherName = activePeriods.find((p) => p.teacher_id === absentId)?.teacher?.name ?? absentId;
+
+      for (const p of absentPeriods) {
+        // Candidates who are FREE at this period
+        const free = candidateIds.filter((cid) => {
+          const cp = periodMap.get(`${cid}:${day}:${p.period}`);
+          return cp && cp.raw === 'FREE';
+        });
+
+        if (free.length === 0) {
+          assignments.push({
+            period: p.period,
+            absent_teacher_id: absentId,
+            absent_teacher_name: absentTeacherName,
+            substitute_id: null,
+            substitute_name: null,
+            grades: p.grades ?? [],
+            classes: p.classes ?? [],
+            raw: p.raw,
+          });
+          continue;
+        }
+
+        const periodGrades = new Set((p.grades ?? []).map(Number));
+        const periodClasses = new Set(p.classes ?? []);
+
+        // Score: grade match = 2, class match = 1, minus 0.1 per existing assignment (load balance)
+        const scored = free.map((cid) => {
+          const prof = profiles.get(cid) ?? { grades: new Set<number>(), classes: new Set<string>() };
+          const gradeScore = [...periodGrades].some((g) => prof.grades.has(g)) ? 2 : 0;
+          const classScore = [...periodClasses].some((c) => prof.classes.has(c)) ? 1 : 0;
+          const loadPenalty = (assignmentCount.get(cid) ?? 0) * 0.1;
+          return { cid, score: gradeScore + classScore - loadPenalty };
+        });
+
+        scored.sort((a, b) => b.score - a.score);
+        const best = scored[0];
+
+        assignmentCount.set(best.cid, (assignmentCount.get(best.cid) ?? 0) + 1);
+
+        const subName = activePeriods.find((sp) => sp.teacher_id === best.cid)?.teacher?.name ?? best.cid;
+
+        assignments.push({
+          period: p.period,
+          absent_teacher_id: absentId,
+          absent_teacher_name: absentTeacherName,
+          substitute_id: best.cid,
+          substitute_name: subName,
+          grades: p.grades ?? [],
+          classes: p.classes ?? [],
+          raw: p.raw,
+        });
+      }
+    }
+
+    assignments.sort((a, b) => a.period - b.period || a.absent_teacher_name.localeCompare(b.absent_teacher_name));
+
+    const unresolved = assignments.filter((a) => !a.substitute_id);
+
+    return { assignments, unresolved_count: unresolved.length };
+  }
+
   async validate(
     day: string,
     date: string,

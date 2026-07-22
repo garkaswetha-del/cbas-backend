@@ -43,6 +43,22 @@ export class SubstitutionController {
     return this.service.removePermanentException(teacher_id);
   }
 
+  // POST /substitution/allocate
+  @Post('allocate')
+  allocate(@Body() body: {
+    day: string;
+    date: string;
+    absent_teacher_ids: string[];
+    temp_unavailable_teacher_ids: string[];
+  }) {
+    return this.service.allocate(
+      body.day,
+      body.date,
+      body.absent_teacher_ids || [],
+      body.temp_unavailable_teacher_ids || [],
+    );
+  }
+
   // POST /substitution/validate
   @Post('validate')
   validate(@Body() body: {
