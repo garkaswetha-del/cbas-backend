@@ -1,4 +1,4 @@
-import { Injectable } from '@nestjs/common';
+import { Injectable, OnModuleInit } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { Teacher } from './entities/teacher.entity';
@@ -10,7 +10,7 @@ import { TimetableParserService } from './timetable-parser.service';
 import { ValidationService, PeriodRecord, TeacherProfile } from './validation.service';
 
 @Injectable()
-export class SubstitutionService {
+export class SubstitutionService implements OnModuleInit {
   constructor(
     @InjectRepository(Teacher) private teacherRepo: Repository<Teacher>,
     @InjectRepository(TimetablePeriod) private periodRepo: Repository<TimetablePeriod>,
@@ -20,6 +20,29 @@ export class SubstitutionService {
     private readonly parser: TimetableParserService,
     private readonly validation: ValidationService,
   ) {}
+
+  async onModuleInit() {
+    // synchronize: false globally — create table manually so it exists before any query
+    await this.logRepo.manager.query(`
+      CREATE TABLE IF NOT EXISTS substitution_log (
+        id                   UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+        substitute_teacher_id VARCHAR NOT NULL,
+        absent_teacher_id     VARCHAR NOT NULL,
+        date                  VARCHAR(10) NOT NULL,
+        day                   VARCHAR(5)  NOT NULL,
+        period                INTEGER     NOT NULL,
+        grades                TEXT,
+        classes               TEXT,
+        created_at            TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+      )
+    `);
+    await this.logRepo.manager.query(
+      `CREATE INDEX IF NOT EXISTS idx_sub_log_date    ON substitution_log(date)`,
+    );
+    await this.logRepo.manager.query(
+      `CREATE INDEX IF NOT EXISTS idx_sub_log_teacher ON substitution_log(substitute_teacher_id)`,
+    );
+  }
 
   // Minimum grade distance between a period's grades and a teacher's grade profile.
   // Returns 0 if same grade, 1 if one grade apart, etc. 999 if either set is empty.
