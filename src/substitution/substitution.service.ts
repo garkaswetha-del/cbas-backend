@@ -201,19 +201,22 @@ export class SubstitutionService implements OnModuleInit {
     const termStart = new Date();
     termStart.setDate(termStart.getDate() - 90);
     const termStartStr = termStart.toISOString().slice(0, 10);
-    const historyCounts = await this.logRepo
-      .createQueryBuilder('l')
-      .select('l.substitute_teacher_id', 'tid')
-      .addSelect('COUNT(*)', 'cnt')
-      .where('l.date >= :termStart', { termStart: termStartStr })
-      .groupBy('l.substitute_teacher_id')
-      .getRawMany();
+    const historyCounts: { tid: string; cnt: string }[] = await this.logRepo.manager.query(
+      `SELECT substitute_teacher_id AS tid, COUNT(*)::text AS cnt
+       FROM substitution_log WHERE date >= $1
+       GROUP BY substitute_teacher_id`,
+      [termStartStr],
+    );
     const historyMap = new Map<string, number>(
       historyCounts.map((r) => [r.tid, parseInt(r.cnt, 10)]),
     );
 
     // ── Rules 8 & 9 — today's existing log (for consecutive + concentration) ──
-    const todayLog = await this.logRepo.find({ where: { date } });
+    const todayLog: { substitute_teacher_id: string; period: number }[] =
+      await this.logRepo.manager.query(
+        `SELECT substitute_teacher_id, period FROM substitution_log WHERE date = $1`,
+        [date],
+      );
     // teacher_id → set of periods already assigned today (from previous runs)
     const todayLogPeriods = new Map<string, Set<number>>();
     for (const log of todayLog) {
@@ -323,21 +326,27 @@ export class SubstitutionService implements OnModuleInit {
 
     // ── Persist to substitution_log (replace today's entries for these absences) ──
     for (const absentId of absentTeacherIds) {
-      await this.logRepo.delete({ date, absent_teacher_id: absentId });
-    }
-    const logsToSave = assignments
-      .filter((a) => a.substitute_id !== null)
-      .map((a) =>
-        this.logRepo.create({
-          substitute_teacher_id: a.substitute_id!,
-          absent_teacher_id: a.absent_teacher_id,
-          date, day,
-          period: a.period,
-          grades: a.grades,
-          classes: a.classes,
-        }),
+      await this.logRepo.manager.query(
+        `DELETE FROM substitution_log WHERE date = $1 AND absent_teacher_id = $2`,
+        [date, absentId],
       );
-    if (logsToSave.length > 0) await this.logRepo.save(logsToSave);
+    }
+    for (const a of assignments.filter((x) => x.substitute_id !== null)) {
+      await this.logRepo.manager.query(
+        `INSERT INTO substitution_log
+           (substitute_teacher_id, absent_teacher_id, date, day, period, grades, classes)
+         VALUES ($1, $2, $3, $4, $5, $6, $7)`,
+        [
+          a.substitute_id,
+          a.absent_teacher_id,
+          date,
+          day,
+          a.period,
+          a.grades.length > 0 ? a.grades.join(',') : null,
+          a.classes.length > 0 ? a.classes.join(',') : null,
+        ],
+      );
+    }
 
     return { assignments, unresolved_count: assignments.filter((a) => !a.substitute_id).length };
   }
