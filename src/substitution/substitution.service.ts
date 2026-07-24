@@ -197,7 +197,32 @@ export class SubstitutionService implements OnModuleInit {
     const allTeacherIds = [...new Set(activePeriods.map((p) => p.teacher_id))];
     const candidateIds = allTeacherIds.filter((id) => !excludedIds.has(id));
 
-    // ── Rule 7 — load balancing: term history (last 90 days) ─────────────────
+    // ── Stage definitions ─────────────────────────────────────────────────────
+    const STAGE_MAP: Record<string, Set<number>> = {
+      Preparatory: new Set([3, 4, 5]),
+      Middle:      new Set([6, 7, 8]),
+      Secondary:   new Set([9, 10]),
+    };
+
+    // Which stage does a set of period grades belong to? (first match wins)
+    const getStage = (grades: Set<number>): string | null => {
+      for (const [name, gradeSet] of Object.entries(STAGE_MAP)) {
+        for (const g of grades) { if (gradeSet.has(g)) return name; }
+      }
+      return null;
+    };
+
+    // Does a teacher's profile overlap with the given stage?
+    const teacherInStage = (tid: string, stageName: string): boolean => {
+      const prof = profiles.get(tid);
+      if (!prof) return false;
+      const stageGrades = STAGE_MAP[stageName];
+      if (!stageGrades) return false;
+      for (const g of prof.grades) { if (stageGrades.has(g)) return true; }
+      return false;
+    };
+
+    // ── Fair-distribution history (last 90 days) ──────────────────────────────
     const termStart = new Date();
     termStart.setDate(termStart.getDate() - 90);
     const termStartStr = termStart.toISOString().slice(0, 10);
@@ -211,25 +236,7 @@ export class SubstitutionService implements OnModuleInit {
       historyCounts.map((r) => [r.tid, parseInt(r.cnt, 10)]),
     );
 
-    // ── Rules 8 & 9 — today's existing log (for consecutive + concentration) ──
-    const todayLog: { substitute_teacher_id: string; period: number }[] =
-      await this.logRepo.manager.query(
-        `SELECT substitute_teacher_id, period FROM substitution_log WHERE date = $1`,
-        [date],
-      );
-    // teacher_id → set of periods already assigned today (from previous runs)
-    const todayLogPeriods = new Map<string, Set<number>>();
-    for (const log of todayLog) {
-      if (!todayLogPeriods.has(log.substitute_teacher_id)) {
-        todayLogPeriods.set(log.substitute_teacher_id, new Set());
-      }
-      todayLogPeriods.get(log.substitute_teacher_id)!.add(log.period);
-    }
-
-    // teacher_id → set of periods assigned in THIS run (built up as we go)
-    const runPeriods = new Map<string, Set<number>>();
-
-    // ── Rule 10 — max 7 periods per day (regular + substitution) ─────────────
+    // ── Max-periods cap (Rule 10) ─────────────────────────────────────────────
     const MAX_DAILY_PERIODS = 7;
     const regularPeriodsOnDay = new Map<string, number>();
     for (const tid of allTeacherIds) {
@@ -238,6 +245,9 @@ export class SubstitutionService implements OnModuleInit {
         activePeriods.filter((sp) => sp.teacher_id === tid && sp.day === (day as any) && sp.raw !== 'FREE').length,
       );
     }
+
+    // Substitution count accumulated in THIS run (so fair-distribution stays fair within a single run)
+    const runSubCount = new Map<string, number>();
 
     // ── Allocation loop ───────────────────────────────────────────────────────
     const assignments: Array<{
@@ -251,6 +261,7 @@ export class SubstitutionService implements OnModuleInit {
       classes: string[];
       raw: string;
       reason: string;
+      cross_stage: boolean;
     }> = [];
 
     for (const absentId of absentTeacherIds) {
@@ -262,14 +273,13 @@ export class SubstitutionService implements OnModuleInit {
         activePeriods.find((p) => p.teacher_id === absentId)?.teacher?.name ?? absentId;
 
       for (const p of absentPeriods) {
-        // Rule 1: must be free at this (day, period)
-        // Rule 10: total workload today (regular + subs this run) must be < 7
+        // ── Step 1: eligible pool — free at this slot AND under daily cap ──
         const free = candidateIds.filter((cid) => {
           const cp = periodMap.get(`${cid}:${day}:${p.period}`);
           if (!cp || cp.raw !== 'FREE') return false;
-          const regularCount = regularPeriodsOnDay.get(cid) ?? 0;
-          const subCount = runPeriods.get(cid)?.size ?? 0;
-          return regularCount + subCount < MAX_DAILY_PERIODS;
+          const regular = regularPeriodsOnDay.get(cid) ?? 0;
+          const subs    = runSubCount.get(cid) ?? 0;
+          return regular + subs < MAX_DAILY_PERIODS;
         });
 
         if (free.length === 0) {
@@ -280,85 +290,46 @@ export class SubstitutionService implements OnModuleInit {
             substitute_regular_periods: 0,
             grades: p.grades ?? [], classes: p.classes ?? [], raw: p.raw,
             reason: 'No substitute available',
+            cross_stage: false,
           });
           continue;
         }
 
         const periodGrades = new Set((p.grades ?? []).map(Number));
-        const periodClasses = new Set(p.classes ?? []);
+        const periodStage  = getStage(periodGrades);
 
-        const scored = free.map((cid) => {
-          const prof = profiles.get(cid) ?? { grades: new Set<number>(), classes: new Set<string>() };
+        // ── Step 2: prefer same-stage candidates ──
+        const sameStage  = periodStage ? free.filter((cid) => teacherInStage(cid, periodStage)) : [];
+        const pool       = sameStage.length > 0 ? sameStage : free;
+        const isCrossStage = sameStage.length === 0 && free.length > 0;
 
-          // Rules 5 & 6: grade proximity (primary hard criterion — NOT additive with penalties)
-          const dist = this.minGradeDistance(periodGrades, prof.grades);
-          const classMatch = periodClasses.size > 0 && [...periodClasses].some((c) => prof.classes.has(c)) ? 1 : 0;
-
-          // Rule 7: term history penalty
-          const historyPenalty = (historyMap.get(cid) ?? 0) * 0.05;
-
-          // All periods this teacher is doing today (log + current run)
-          const allTodayPeriods = new Set([
-            ...(todayLogPeriods.get(cid) ?? new Set()),
-            ...(runPeriods.get(cid) ?? new Set()),
-          ]);
-
-          // Rule 9: today concentration penalty
-          const concentrationPenalty = allTodayPeriods.size * 0.3;
-
-          // Rule 8: consecutive period penalty
-          const consecutivePenalty =
-            allTodayPeriods.has(p.period - 1) || allTodayPeriods.has(p.period + 1) ? 0.5 : 0;
-
-          return {
-            cid,
-            dist,
-            classMatch,
-            totalPenalty: historyPenalty + concentrationPenalty + consecutivePenalty,
-          };
+        // ── Step 3: fair distribution — pick teacher with fewest total subs ──
+        // total = term history + subs already assigned in this run
+        pool.sort((a, b) => {
+          const totalA = (historyMap.get(a) ?? 0) + (runSubCount.get(a) ?? 0);
+          const totalB = (historyMap.get(b) ?? 0) + (runSubCount.get(b) ?? 0);
+          return totalA - totalB;
         });
+        const bestId = pool[0];
 
-        // Sort order — strict priority tiers so penalties never override grade proximity:
-        //   1. Closest grade (dist ascending) — a same-grade teacher always beats a wrong-grade one
-        //   2. Class match (descending) — among equal-grade teachers, prefer one who knows this class
-        //   3. Lowest total penalty (ascending) — final tiebreaker: term load / concentration / consecutive
-        scored.sort((a, b) => {
-          if (a.dist !== b.dist) return a.dist - b.dist;
-          if (a.classMatch !== b.classMatch) return b.classMatch - a.classMatch;
-          return a.totalPenalty - b.totalPenalty;
-        });
-        const best = scored[0];
+        // Track for cap and fair-distribution in subsequent periods this run
+        runSubCount.set(bestId, (runSubCount.get(bestId) ?? 0) + 1);
 
-        // Track this assignment for Rules 8 & 9 in subsequent periods
-        if (!runPeriods.has(best.cid)) runPeriods.set(best.cid, new Set());
-        runPeriods.get(best.cid)!.add(p.period);
+        const subName = activePeriods.find((sp) => sp.teacher_id === bestId)?.teacher?.name ?? bestId;
+        const regularPeriodsToday = regularPeriodsOnDay.get(bestId) ?? 0;
 
-        const subName =
-          activePeriods.find((sp) => sp.teacher_id === best.cid)?.teacher?.name ?? best.cid;
-
-        // Build human-readable reason for why this sub was chosen
-        const reasonParts: string[] = [];
-        if (periodGrades.size > 0) {
-          if (best.dist === 0) reasonParts.push('Same grade');
-          else if (best.dist === 999) reasonParts.push('No grade data');
-          else if (best.dist <= 2) reasonParts.push('Near grade');
-          else reasonParts.push('Different grade');
-        }
-        if (best.classMatch > 0) reasonParts.push('Class match');
-        if (reasonParts.length === 0) reasonParts.push('Lowest load');
-
-        // Count regular (non-FREE) periods for this substitute on this day
-        const regularPeriodsToday = activePeriods.filter(
-          (sp) => sp.teacher_id === best.cid && sp.day === (day as any) && sp.raw !== 'FREE',
-        ).length;
+        const reason = isCrossStage
+          ? `No ${periodStage ?? 'same-stage'} teacher free — cross-stage assigned`
+          : `${periodStage ?? 'Stage'} stage · fair distribution`;
 
         assignments.push({
           period: p.period, absent_teacher_id: absentId,
           absent_teacher_name: absentTeacherName,
-          substitute_id: best.cid, substitute_name: subName,
+          substitute_id: bestId, substitute_name: subName,
           substitute_regular_periods: regularPeriodsToday,
           grades: p.grades ?? [], classes: p.classes ?? [], raw: p.raw,
-          reason: reasonParts.join(' + '),
+          reason,
+          cross_stage: isCrossStage,
         });
       }
     }
