@@ -222,9 +222,9 @@ export class SubstitutionService implements OnModuleInit {
       return false;
     };
 
-    // ── Fair-distribution history (last 90 days) ──────────────────────────────
+    // ── Fair-distribution history (last 7 days) ───────────────────────────────
     const termStart = new Date();
-    termStart.setDate(termStart.getDate() - 90);
+    termStart.setDate(termStart.getDate() - 7);
     const termStartStr = termStart.toISOString().slice(0, 10);
     const historyCounts: { tid: string; cnt: string }[] = await this.logRepo.manager.query(
       `SELECT substitute_teacher_id AS tid, COUNT(*)::text AS cnt
