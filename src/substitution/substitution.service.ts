@@ -367,6 +367,14 @@ export class SubstitutionService implements OnModuleInit {
       cross_stage: boolean;
     }> = [];
 
+    const debugLog: Array<{
+      absent: string;
+      period: number;
+      absentClasses: string[];
+      freePool: { name: string; classes: string[]; overlap: number; weeklyLoad: number }[];
+      chosen: string | null;
+    }> = [];
+
     for (const absentId of absentTeacherIds) {
       const absentPeriods = activePeriods
         .filter((p) => p.teacher_id === absentId && p.day === (day as any) && p.raw !== 'FREE')
@@ -391,6 +399,26 @@ export class SubstitutionService implements OnModuleInit {
           return regular + subs < MAX_DAILY_PERIODS;
         });
 
+        // ── Step 2: rank free candidates by section overlap then fair distribution ──
+        const scored = free.map((cid) => ({
+          cid,
+          name:        activePeriods.find((sp) => sp.teacher_id === cid)?.teacher?.name ?? cid,
+          classes:     [...(profiles.get(cid)?.classes ?? [])],
+          overlap:     sectionOverlap(cid, absentId),
+          weeklyLoad:  (historyMap.get(cid) ?? 0) + (runSubCount.get(cid) ?? 0),
+        }));
+        scored.sort((a, b) =>
+          b.overlap !== a.overlap ? b.overlap - a.overlap : a.weeklyLoad - b.weeklyLoad,
+        );
+
+        debugLog.push({
+          absent: absentTeacherName,
+          period: p.period,
+          absentClasses: [...(profiles.get(absentId)?.classes ?? [])],
+          freePool: scored.map(({ name, classes, overlap, weeklyLoad }) => ({ name, classes, overlap, weeklyLoad })),
+          chosen: free.length === 0 ? null : scored[0]?.name ?? null,
+        });
+
         if (free.length === 0) {
           assignments.push({
             period: p.period, absent_teacher_id: absentId,
@@ -404,17 +432,6 @@ export class SubstitutionService implements OnModuleInit {
           continue;
         }
 
-        // ── Step 2: rank free candidates by section overlap then fair distribution ──
-        // Section overlap = how many sections candidate shares with absent teacher.
-        // Within same overlap tier, pick the one with fewest subs this week (fair dist).
-        const scored = free.map((cid) => ({
-          cid,
-          overlap:     sectionOverlap(cid, absentId),
-          weeklyLoad:  (historyMap.get(cid) ?? 0) + (runSubCount.get(cid) ?? 0),
-        }));
-        scored.sort((a, b) =>
-          b.overlap !== a.overlap ? b.overlap - a.overlap : a.weeklyLoad - b.weeklyLoad,
-        );
         const best         = scored[0];
         const bestId       = best.cid;
         const isCrossStage = best.overlap === 0;
@@ -481,7 +498,7 @@ export class SubstitutionService implements OnModuleInit {
       );
     }
 
-    return { assignments: finalAssignments, unresolved_count: finalAssignments.filter((a) => !a.substitute_id).length };
+    return { assignments: finalAssignments, unresolved_count: finalAssignments.filter((a) => !a.substitute_id).length, _debug: debugLog };
   }
 
   async validate(
