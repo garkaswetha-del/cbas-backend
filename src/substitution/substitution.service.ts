@@ -184,10 +184,12 @@ export class SubstitutionService implements OnModuleInit {
       periodMap.set(`${p.teacher_id}:${p.day}:${p.period}`, p);
     }
 
-    // ── Grade/class profiles (rules 5 & 6) ───────────────────────────────────
+    // ── Grade/class profiles — built from ALL period types, not just ACADEMIC ──
+    // (if the parser stores teaching periods as CCA or another type, we still
+    //  want those grades to count toward stage membership)
     const profiles = new Map<string, { grades: Set<number>; classes: Set<string> }>();
     for (const p of activePeriods) {
-      if (p.period_type !== 'ACADEMIC') continue;
+      if (p.raw === 'FREE') continue; // free slots carry no grade info
       if (!profiles.has(p.teacher_id)) profiles.set(p.teacher_id, { grades: new Set(), classes: new Set() });
       const prof = profiles.get(p.teacher_id)!;
       (p.grades ?? []).forEach((g) => prof.grades.add(Number(g)));
@@ -196,6 +198,12 @@ export class SubstitutionService implements OnModuleInit {
 
     const allTeacherIds = [...new Set(activePeriods.map((p) => p.teacher_id))];
     const candidateIds = allTeacherIds.filter((id) => !excludedIds.has(id));
+
+    // Which teachers have at least one record on this day (guards against marking
+    // a teacher free on a day they don't work at all)
+    const teachersOnThisDay = new Set<string>(
+      activePeriods.filter((p) => p.day === (day as any)).map((p) => p.teacher_id),
+    );
 
     // ── Stage definitions ─────────────────────────────────────────────────────
     const STAGE_MAP: Record<string, Set<number>> = {
@@ -274,9 +282,15 @@ export class SubstitutionService implements OnModuleInit {
 
       for (const p of absentPeriods) {
         // ── Step 1: eligible pool — free at this slot AND under daily cap ──
+        // A teacher is FREE at (day, period) if:
+        //   a) they work this day (have at least one record on this day), AND
+        //   b) they have no record for this specific period (parser skips empty slots)
+        //      OR their record explicitly says 'FREE'
         const free = candidateIds.filter((cid) => {
+          if (!teachersOnThisDay.has(cid)) return false; // doesn't work this day
           const cp = periodMap.get(`${cid}:${day}:${p.period}`);
-          if (!cp || cp.raw !== 'FREE') return false;
+          const isFree = !cp || cp.raw === 'FREE';
+          if (!isFree) return false;
           const regular = regularPeriodsOnDay.get(cid) ?? 0;
           const subs    = runSubCount.get(cid) ?? 0;
           return regular + subs < MAX_DAILY_PERIODS;
