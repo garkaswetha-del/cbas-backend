@@ -236,9 +236,11 @@ export class SubstitutionService implements OnModuleInit {
       absent_teacher_name: string;
       substitute_id: string | null;
       substitute_name: string | null;
+      substitute_regular_periods: number;
       grades: number[];
       classes: string[];
       raw: string;
+      reason: string;
     }> = [];
 
     for (const absentId of absentTeacherIds) {
@@ -261,7 +263,9 @@ export class SubstitutionService implements OnModuleInit {
             period: p.period, absent_teacher_id: absentId,
             absent_teacher_name: absentTeacherName,
             substitute_id: null, substitute_name: null,
+            substitute_regular_periods: 0,
             grades: p.grades ?? [], classes: p.classes ?? [], raw: p.raw,
+            reason: 'No substitute available',
           });
           continue;
         }
@@ -297,6 +301,8 @@ export class SubstitutionService implements OnModuleInit {
 
           return {
             cid,
+            dist,
+            classScore,
             score: gradeScore + classScore - historyPenalty - concentrationPenalty - consecutivePenalty,
           };
         });
@@ -311,18 +317,46 @@ export class SubstitutionService implements OnModuleInit {
         const subName =
           activePeriods.find((sp) => sp.teacher_id === best.cid)?.teacher?.name ?? best.cid;
 
+        // Build human-readable reason for why this sub was chosen
+        const reasonParts: string[] = [];
+        if (periodGrades.size > 0) {
+          if (best.dist === 0) reasonParts.push('Same grade');
+          else if (best.dist <= 2) reasonParts.push('Near grade');
+        }
+        if (best.classScore > 0) reasonParts.push('Class match');
+        if (reasonParts.length === 0) reasonParts.push('Lowest load');
+
+        // Count regular (non-FREE) periods for this substitute on this day
+        const regularPeriodsToday = activePeriods.filter(
+          (sp) => sp.teacher_id === best.cid && sp.day === (day as any) && sp.raw !== 'FREE',
+        ).length;
+
         assignments.push({
           period: p.period, absent_teacher_id: absentId,
           absent_teacher_name: absentTeacherName,
           substitute_id: best.cid, substitute_name: subName,
+          substitute_regular_periods: regularPeriodsToday,
           grades: p.grades ?? [], classes: p.classes ?? [], raw: p.raw,
+          reason: reasonParts.join(' + '),
         });
       }
     }
 
     assignments.sort(
-      (a, b) => a.period - b.period || a.absent_teacher_name.localeCompare(b.absent_teacher_name),
+      (a, b) => a.absent_teacher_name.localeCompare(b.absent_teacher_name) || a.period - b.period,
     );
+
+    // ── Compute how many substitution periods each sub has been given in this run ──
+    const subCountInRun = new Map<string, number>();
+    for (const a of assignments) {
+      if (a.substitute_id) {
+        subCountInRun.set(a.substitute_id, (subCountInRun.get(a.substitute_id) ?? 0) + 1);
+      }
+    }
+    const finalAssignments = assignments.map((a) => ({
+      ...a,
+      substitute_subs_today: a.substitute_id ? (subCountInRun.get(a.substitute_id) ?? 0) : 0,
+    }));
 
     // ── Persist to substitution_log (replace today's entries for these absences) ──
     for (const absentId of absentTeacherIds) {
@@ -331,7 +365,7 @@ export class SubstitutionService implements OnModuleInit {
         [date, absentId],
       );
     }
-    for (const a of assignments.filter((x) => x.substitute_id !== null)) {
+    for (const a of finalAssignments.filter((x) => x.substitute_id !== null)) {
       await this.logRepo.manager.query(
         `INSERT INTO substitution_log
            (substitute_teacher_id, absent_teacher_id, date, day, period, grades, classes)
@@ -348,7 +382,7 @@ export class SubstitutionService implements OnModuleInit {
       );
     }
 
-    return { assignments, unresolved_count: assignments.filter((a) => !a.substitute_id).length };
+    return { assignments: finalAssignments, unresolved_count: finalAssignments.filter((a) => !a.substitute_id).length };
   }
 
   async validate(
