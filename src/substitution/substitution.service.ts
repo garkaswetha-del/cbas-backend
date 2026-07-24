@@ -290,14 +290,11 @@ export class SubstitutionService implements OnModuleInit {
         const scored = free.map((cid) => {
           const prof = profiles.get(cid) ?? { grades: new Set<number>(), classes: new Set<string>() };
 
-          // Rules 5 & 6: grade proximity score (0 = 4+ grades away, up to 2 = same grade)
+          // Rules 5 & 6: grade proximity (primary hard criterion — NOT additive with penalties)
           const dist = this.minGradeDistance(periodGrades, prof.grades);
-          const gradeScore = periodGrades.size > 0 ? Math.max(0, 2 - dist * 0.5) : 0;
+          const classMatch = periodClasses.size > 0 && [...periodClasses].some((c) => prof.classes.has(c)) ? 1 : 0;
 
-          // Class match bonus
-          const classScore = [...periodClasses].some((c) => prof.classes.has(c)) ? 1 : 0;
-
-          // Rule 7: term history penalty (−0.05 per past substitution this term)
+          // Rule 7: term history penalty
           const historyPenalty = (historyMap.get(cid) ?? 0) * 0.05;
 
           // All periods this teacher is doing today (log + current run)
@@ -306,22 +303,30 @@ export class SubstitutionService implements OnModuleInit {
             ...(runPeriods.get(cid) ?? new Set()),
           ]);
 
-          // Rule 9: today concentration penalty (−0.3 per assignment already today)
+          // Rule 9: today concentration penalty
           const concentrationPenalty = allTodayPeriods.size * 0.3;
 
-          // Rule 8: consecutive period penalty (−0.5 if adjacent period already assigned)
+          // Rule 8: consecutive period penalty
           const consecutivePenalty =
             allTodayPeriods.has(p.period - 1) || allTodayPeriods.has(p.period + 1) ? 0.5 : 0;
 
           return {
             cid,
             dist,
-            classScore,
-            score: gradeScore + classScore - historyPenalty - concentrationPenalty - consecutivePenalty,
+            classMatch,
+            totalPenalty: historyPenalty + concentrationPenalty + consecutivePenalty,
           };
         });
 
-        scored.sort((a, b) => b.score - a.score);
+        // Sort order — strict priority tiers so penalties never override grade proximity:
+        //   1. Closest grade (dist ascending) — a same-grade teacher always beats a wrong-grade one
+        //   2. Class match (descending) — among equal-grade teachers, prefer one who knows this class
+        //   3. Lowest total penalty (ascending) — final tiebreaker: term load / concentration / consecutive
+        scored.sort((a, b) => {
+          if (a.dist !== b.dist) return a.dist - b.dist;
+          if (a.classMatch !== b.classMatch) return b.classMatch - a.classMatch;
+          return a.totalPenalty - b.totalPenalty;
+        });
         const best = scored[0];
 
         // Track this assignment for Rules 8 & 9 in subsequent periods
@@ -335,9 +340,11 @@ export class SubstitutionService implements OnModuleInit {
         const reasonParts: string[] = [];
         if (periodGrades.size > 0) {
           if (best.dist === 0) reasonParts.push('Same grade');
+          else if (best.dist === 999) reasonParts.push('No grade data');
           else if (best.dist <= 2) reasonParts.push('Near grade');
+          else reasonParts.push('Different grade');
         }
-        if (best.classScore > 0) reasonParts.push('Class match');
+        if (best.classMatch > 0) reasonParts.push('Class match');
         if (reasonParts.length === 0) reasonParts.push('Lowest load');
 
         // Count regular (non-FREE) periods for this substitute on this day
