@@ -314,29 +314,15 @@ export class SubstitutionService implements OnModuleInit {
       activePeriods.filter((p) => p.day === (day as any)).map((p) => p.teacher_id),
     );
 
-    // ── Stage definitions ─────────────────────────────────────────────────────
-    const STAGE_MAP: Record<string, Set<number>> = {
-      Preparatory: new Set([3, 4, 5]),
-      Middle:      new Set([6, 7, 8]),
-      Secondary:   new Set([9, 10]),
-    };
-
-    // Which stage does a set of period grades belong to? (first match wins)
-    const getStage = (grades: Set<number>): string | null => {
-      for (const [name, gradeSet] of Object.entries(STAGE_MAP)) {
-        for (const g of grades) { if (gradeSet.has(g)) return name; }
-      }
-      return null;
-    };
-
-    // Does a teacher's profile overlap with the given stage?
-    const teacherInStage = (tid: string, stageName: string): boolean => {
-      const prof = profiles.get(tid);
-      if (!prof) return false;
-      const stageGrades = STAGE_MAP[stageName];
-      if (!stageGrades) return false;
-      for (const g of prof.grades) { if (stageGrades.has(g)) return true; }
-      return false;
+    // ── Section-overlap scoring ───────────────────────────────────────────────
+    // How many sections does candidate C share with absent teacher A?
+    // (higher = better match; 0 = no shared sections = cross-section fallback)
+    const sectionOverlap = (candidateId: string, absentId: string): number => {
+      const absentClasses  = profiles.get(absentId)?.classes  ?? new Set<string>();
+      const candidateClasses = profiles.get(candidateId)?.classes ?? new Set<string>();
+      let count = 0;
+      for (const cls of absentClasses) { if (candidateClasses.has(cls)) count++; }
+      return count;
     };
 
     // ── Fair-distribution history (last 7 days) ───────────────────────────────
@@ -418,22 +404,20 @@ export class SubstitutionService implements OnModuleInit {
           continue;
         }
 
-        const periodGrades = new Set(enrichGrades((p.grades ?? []).map(Number), p.classes ?? []));
-        const periodStage  = getStage(periodGrades);
-
-        // ── Step 2: prefer same-stage candidates ──
-        const sameStage  = periodStage ? free.filter((cid) => teacherInStage(cid, periodStage)) : [];
-        const pool       = sameStage.length > 0 ? sameStage : free;
-        const isCrossStage = sameStage.length === 0 && free.length > 0;
-
-        // ── Step 3: fair distribution — pick teacher with fewest total subs ──
-        // total = term history + subs already assigned in this run
-        pool.sort((a, b) => {
-          const totalA = (historyMap.get(a) ?? 0) + (runSubCount.get(a) ?? 0);
-          const totalB = (historyMap.get(b) ?? 0) + (runSubCount.get(b) ?? 0);
-          return totalA - totalB;
-        });
-        const bestId = pool[0];
+        // ── Step 2: rank free candidates by section overlap then fair distribution ──
+        // Section overlap = how many sections candidate shares with absent teacher.
+        // Within same overlap tier, pick the one with fewest subs this week (fair dist).
+        const scored = free.map((cid) => ({
+          cid,
+          overlap:     sectionOverlap(cid, absentId),
+          weeklyLoad:  (historyMap.get(cid) ?? 0) + (runSubCount.get(cid) ?? 0),
+        }));
+        scored.sort((a, b) =>
+          b.overlap !== a.overlap ? b.overlap - a.overlap : a.weeklyLoad - b.weeklyLoad,
+        );
+        const best         = scored[0];
+        const bestId       = best.cid;
+        const isCrossStage = best.overlap === 0;
 
         // Track for cap and fair-distribution in subsequent periods this run
         runSubCount.set(bestId, (runSubCount.get(bestId) ?? 0) + 1);
@@ -442,8 +426,8 @@ export class SubstitutionService implements OnModuleInit {
         const regularPeriodsToday = regularPeriodsOnDay.get(bestId) ?? 0;
 
         const reason = isCrossStage
-          ? `No ${periodStage ?? 'same-stage'} teacher free — cross-stage assigned`
-          : `${periodStage ?? 'Stage'} stage · fair distribution`;
+          ? `No section-matched teacher free — cross-section assigned`
+          : `Section match (${best.overlap} shared) · fair distribution`;
 
         assignments.push({
           period: p.period, absent_teacher_id: absentId,
