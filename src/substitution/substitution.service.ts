@@ -229,6 +229,16 @@ export class SubstitutionService implements OnModuleInit {
     // teacher_id → set of periods assigned in THIS run (built up as we go)
     const runPeriods = new Map<string, Set<number>>();
 
+    // ── Rule 10 — max 7 periods per day (regular + substitution) ─────────────
+    const MAX_DAILY_PERIODS = 7;
+    const regularPeriodsOnDay = new Map<string, number>();
+    for (const tid of allTeacherIds) {
+      regularPeriodsOnDay.set(
+        tid,
+        activePeriods.filter((sp) => sp.teacher_id === tid && sp.day === (day as any) && sp.raw !== 'FREE').length,
+      );
+    }
+
     // ── Allocation loop ───────────────────────────────────────────────────────
     const assignments: Array<{
       period: number;
@@ -253,9 +263,13 @@ export class SubstitutionService implements OnModuleInit {
 
       for (const p of absentPeriods) {
         // Rule 1: must be free at this (day, period)
+        // Rule 10: total workload today (regular + subs this run) must be < 7
         const free = candidateIds.filter((cid) => {
           const cp = periodMap.get(`${cid}:${day}:${p.period}`);
-          return cp && cp.raw === 'FREE';
+          if (!cp || cp.raw !== 'FREE') return false;
+          const regularCount = regularPeriodsOnDay.get(cid) ?? 0;
+          const subCount = runPeriods.get(cid)?.size ?? 0;
+          return regularCount + subCount < MAX_DAILY_PERIODS;
         });
 
         if (free.length === 0) {
