@@ -152,12 +152,33 @@ export class SubstitutionService implements OnModuleInit {
       });
     }
 
-    // Build grade profiles (same logic as allocate)
+    // Load section→grade mapping (same as allocate)
+    let sectionRowsDebug: { name: string; grade: string }[] = await this.logRepo.manager.query(
+      `SELECT DISTINCT name, grade FROM sections WHERE is_active = true AND name IS NOT NULL AND grade IS NOT NULL`,
+    );
+    if (sectionRowsDebug.length === 0) {
+      sectionRowsDebug = await this.logRepo.manager.query(
+        `SELECT DISTINCT section AS name, grade FROM teacher_mappings WHERE is_active = true AND section IS NOT NULL AND grade IS NOT NULL`,
+      );
+    }
+    const sectionToGradeDebug = new Map<string, number>();
+    for (const row of sectionRowsDebug) {
+      const g = parseInt(row.grade.replace(/[^0-9]/g, ''), 10);
+      if (!isNaN(g) && g > 0) sectionToGradeDebug.set(row.name.trim().toUpperCase(), g);
+    }
+
+    // Build grade profiles (same logic as allocate, with enrichment)
     for (const p of periods) {
       if (p.raw === 'FREE') continue;
       const entry = byTeacher[p.teacher_id];
       if (entry) {
-        const grades = (p.grades ?? []).map(Number);
+        let grades = (p.grades ?? []).map(Number);
+        if (grades.length === 0) {
+          for (const cls of (p.classes ?? [])) {
+            const g = sectionToGradeDebug.get(cls.trim().toUpperCase());
+            if (g !== undefined && !grades.includes(g)) grades.push(g);
+          }
+        }
         grades.forEach((g) => { if (!entry.gradesInProfile.includes(g)) entry.gradesInProfile.push(g); });
       }
     }
@@ -242,15 +263,45 @@ export class SubstitutionService implements OnModuleInit {
       periodMap.set(`${p.teacher_id}:${p.day}:${p.period}`, p);
     }
 
-    // ── Grade/class profiles — built from ALL period types, not just ACADEMIC ──
-    // (if the parser stores teaching periods as CCA or another type, we still
-    //  want those grades to count toward stage membership)
+    // ── Section → grade mapping from the sections table ───────────────────────
+    // The timetable parser stores section names (e.g. ASTEROID) in `classes` but
+    // often leaves `grades` empty. We resolve the grade from the sections table.
+    let sectionRows: { name: string; grade: string }[] = await this.logRepo.manager.query(
+      `SELECT DISTINCT name, grade FROM sections WHERE is_active = true AND name IS NOT NULL AND grade IS NOT NULL`,
+    );
+    if (sectionRows.length === 0) {
+      // Fallback: teacher_mappings if sections table is not yet seeded
+      sectionRows = await this.logRepo.manager.query(
+        `SELECT DISTINCT section AS name, grade FROM teacher_mappings WHERE is_active = true AND section IS NOT NULL AND grade IS NOT NULL`,
+      );
+    }
+    const sectionToGrade = new Map<string, number>();
+    for (const row of sectionRows) {
+      const gradeNum = parseInt(row.grade.replace(/[^0-9]/g, ''), 10);
+      if (!isNaN(gradeNum) && gradeNum > 0) {
+        sectionToGrade.set(row.name.trim().toUpperCase(), gradeNum);
+      }
+    }
+
+    // Enrich a grades array using section names when grades array is empty
+    const enrichGrades = (grades: number[], classes: string[]): number[] => {
+      if (grades.length > 0) return grades;
+      const enriched: number[] = [];
+      for (const cls of (classes ?? [])) {
+        const g = sectionToGrade.get(cls.trim().toUpperCase());
+        if (g !== undefined && !enriched.includes(g)) enriched.push(g);
+      }
+      return enriched;
+    };
+
+    // ── Grade/class profiles — use enriched grades so stage detection works ───
     const profiles = new Map<string, { grades: Set<number>; classes: Set<string> }>();
     for (const p of activePeriods) {
-      if (p.raw === 'FREE') continue; // free slots carry no grade info
+      if (p.raw === 'FREE') continue;
       if (!profiles.has(p.teacher_id)) profiles.set(p.teacher_id, { grades: new Set(), classes: new Set() });
       const prof = profiles.get(p.teacher_id)!;
-      (p.grades ?? []).forEach((g) => prof.grades.add(Number(g)));
+      const grades = enrichGrades((p.grades ?? []).map(Number), p.classes ?? []);
+      grades.forEach((g) => prof.grades.add(g));
       (p.classes ?? []).forEach((c) => prof.classes.add(c));
     }
 
@@ -367,7 +418,7 @@ export class SubstitutionService implements OnModuleInit {
           continue;
         }
 
-        const periodGrades = new Set((p.grades ?? []).map(Number));
+        const periodGrades = new Set(enrichGrades((p.grades ?? []).map(Number), p.classes ?? []));
         const periodStage  = getStage(periodGrades);
 
         // ── Step 2: prefer same-stage candidates ──
