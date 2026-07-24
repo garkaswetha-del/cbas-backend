@@ -76,9 +76,9 @@ export class ValidationService {
     for (const [grade, teacherIds] of gradeToTeachers) {
       if (teacherIds.size > 0 && [...teacherIds].every((id) => excludedTeacherIds.has(id))) {
         issues.push({
-          severity: 'warning',
+          severity: 'info',
           code: 'GRADE_FULLY_EXCLUDED',
-          message: `Every teacher for Grade ${grade} is excluded today (absent, permanent exception, or temporarily unavailable). No substitute will be available for this grade.`,
+          message: `No teacher who normally covers Grade ${grade} is available today. A substitute from a different grade may be assigned instead.`,
           context: { grade, teacherIds: [...teacherIds] },
         });
       }
@@ -87,9 +87,9 @@ export class ValidationService {
     for (const [cls, teacherIds] of classToTeachers) {
       if (teacherIds.size > 0 && [...teacherIds].every((id) => excludedTeacherIds.has(id))) {
         issues.push({
-          severity: 'warning',
+          severity: 'info',
           code: 'CLASS_FULLY_EXCLUDED',
-          message: `Every teacher for class '${cls}' is excluded today (absent, permanent exception, or temporarily unavailable). No substitute will be available for this class.`,
+          message: `No teacher who normally covers class '${cls}' is available today. A substitute from another class may be assigned instead.`,
           context: { class: cls, teacherIds: [...teacherIds] },
         });
       }
