@@ -122,6 +122,64 @@ export class SubstitutionService implements OnModuleInit {
     };
   }
 
+  async debugTimetable(day: string) {
+    const periods = await this.periodRepo.find({
+      where: { is_active: true },
+      relations: ['teacher'],
+      order: { period: 'ASC' },
+    });
+
+    const onDay = periods.filter((p) => p.day === (day as any));
+
+    // Group by teacher
+    const byTeacher: Record<string, {
+      name: string;
+      periodsOnDay: { period: number; raw: string; grades: number[]; classes: string[]; period_type: string }[];
+      gradesInProfile: number[];
+    }> = {};
+
+    for (const p of onDay) {
+      const tid = p.teacher_id;
+      if (!byTeacher[tid]) {
+        byTeacher[tid] = { name: p.teacher?.name ?? tid, periodsOnDay: [], gradesInProfile: [] };
+      }
+      byTeacher[tid].periodsOnDay.push({
+        period: p.period,
+        raw: p.raw,
+        grades: p.grades ?? [],
+        classes: p.classes ?? [],
+        period_type: p.period_type,
+      });
+    }
+
+    // Build grade profiles (same logic as allocate)
+    for (const p of periods) {
+      if (p.raw === 'FREE') continue;
+      const entry = byTeacher[p.teacher_id];
+      if (entry) {
+        const grades = (p.grades ?? []).map(Number);
+        grades.forEach((g) => { if (!entry.gradesInProfile.includes(g)) entry.gradesInProfile.push(g); });
+      }
+    }
+
+    return {
+      day,
+      teacherCount: Object.keys(byTeacher).length,
+      teachers: Object.entries(byTeacher)
+        .sort(([, a], [, b]) => a.name.localeCompare(b.name))
+        .map(([tid, data]) => ({
+          id: tid,
+          name: data.name,
+          periodsOnDay: data.periodsOnDay.sort((a, b) => a.period - b.period),
+          gradesInProfile: data.gradesInProfile.sort((a, b) => a - b),
+          stage: data.gradesInProfile.some(g => [3,4,5].includes(g)) ? 'Preparatory'
+               : data.gradesInProfile.some(g => [6,7,8].includes(g)) ? 'Middle'
+               : data.gradesInProfile.some(g => [9,10].includes(g)) ? 'Secondary'
+               : 'Unknown',
+        })),
+    };
+  }
+
   async getTeachers() {
     const distinct = await this.periodRepo
       .createQueryBuilder('p')

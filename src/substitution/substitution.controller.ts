@@ -1,4 +1,4 @@
-import { Controller, Get, Post, Delete, Body, Param, UploadedFile, UseInterceptors } from '@nestjs/common';
+import { Controller, Get, Post, Delete, Body, Param, Query, UploadedFile, UseInterceptors } from '@nestjs/common';
 import { FileInterceptor } from '@nestjs/platform-express';
 import { SubstitutionService } from './substitution.service';
 
@@ -17,6 +17,12 @@ export class SubstitutionController {
   @Get('timetable/status')
   getTimetableStatus() {
     return this.service.getTimetableStatus();
+  }
+
+  // GET /substitution/debug?day=Fr  — shows what's actually stored per teacher for a given day
+  @Get('debug')
+  debugTimetable(@Query('day') day: string) {
+    return this.service.debugTimetable(day ?? 'Fr');
   }
 
   // GET /substitution/teachers
