@@ -201,6 +201,23 @@ export class SubstitutionService implements OnModuleInit {
     };
   }
 
+  async getTimetableForTeacher(teacherId: string) {
+    const teacher = await this.teacherRepo.findOne({ where: { id: teacherId } });
+    const periods = await this.periodRepo.find({
+      where: { teacher_id: teacherId, is_active: true },
+      order: { day: 'ASC', period: 'ASC' },
+    });
+
+    const DAYS = ['Mo', 'Tu', 'We', 'Th', 'Fr', 'Sa'];
+    const schedule: Record<string, Record<number, string>> = {};
+    for (const d of DAYS) schedule[d] = {};
+    for (const p of periods) {
+      schedule[p.day as string][p.period] = p.raw;
+    }
+
+    return { teacher, schedule };
+  }
+
   async getTeachers() {
     const distinct = await this.periodRepo
       .createQueryBuilder('p')

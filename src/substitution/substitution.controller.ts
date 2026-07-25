@@ -25,6 +25,12 @@ export class SubstitutionController {
     return this.service.debugTimetable(day ?? 'Fr');
   }
 
+  // GET /substitution/timetable/teacher?teacher_id=xxx
+  @Get('timetable/teacher')
+  getTimetableForTeacher(@Query('teacher_id') teacherId: string) {
+    return this.service.getTimetableForTeacher(teacherId);
+  }
+
   // GET /substitution/teachers
   @Get('teachers')
   getTeachers() {
