@@ -311,7 +311,26 @@ export class SubstitutionService implements OnModuleInit {
       return enriched;
     };
 
-    // ── Grade/class profiles — use enriched grades so stage detection works ───
+    // Known section names — used to recover classes from raw text when the PDF
+    // parser produced garbled text (e.g. "Kuvem pu" instead of "Kuvempu")
+    const KNOWN_SECTIONS = [
+      'Edison','Raman','Einstein','Kalam','Satya','Vedha','Shanthi',
+      'Opal','Ruby','Emerald','Diamond',
+      'Mercury','Venus','Mars',
+      'Pegasus','Orion','Centaurus','Hercules',
+      'Meru','Himalaya','Vindhya',
+      'Kuvempu','Bendre','Karantha',
+      'Kaveri','Ganga','Godavari',
+      'Neethi','Yamuna','Kapila',
+    ];
+
+    const extractSectionsFromRaw = (raw: string): string[] => {
+      if (!raw || raw === 'FREE') return [];
+      const normalized = raw.toLowerCase().replace(/\s+/g, '');
+      return KNOWN_SECTIONS.filter((s) => normalized.includes(s.toLowerCase()));
+    };
+
+    // ── Grade/class profiles ──────────────────────────────────────────────────
     const profiles = new Map<string, { grades: Set<number>; classes: Set<string> }>();
     for (const p of activePeriods) {
       if (p.raw === 'FREE') continue;
@@ -319,7 +338,10 @@ export class SubstitutionService implements OnModuleInit {
       const prof = profiles.get(p.teacher_id)!;
       const grades = enrichGrades((p.grades ?? []).map(Number), p.classes ?? []);
       grades.forEach((g) => prof.grades.add(g));
-      (p.classes ?? []).forEach((c) => prof.classes.add(c));
+      // Use stored classes; fall back to extracting from raw when classes is empty
+      const classes = (p.classes ?? []).filter((c) => c.length > 0);
+      const resolved = classes.length > 0 ? classes : extractSectionsFromRaw(p.raw);
+      resolved.forEach((c) => prof.classes.add(c));
     }
 
     const allTeacherIds = [...new Set(activePeriods.map((p) => p.teacher_id))];
