@@ -218,6 +218,59 @@ export class SubstitutionService implements OnModuleInit {
     return { teacher, schedule };
   }
 
+  async getSubstitutionSummary(from: string, to: string) {
+    const rows: { tid: string; cnt: string }[] = await this.logRepo.manager.query(
+      `SELECT substitute_teacher_id AS tid, COUNT(*)::text AS cnt
+       FROM substitution_log
+       WHERE date >= $1 AND date <= $2
+       GROUP BY substitute_teacher_id
+       ORDER BY cnt DESC`,
+      [from, to],
+    );
+
+    const teacherIds = rows.map((r) => r.tid);
+    const teacherMap = new Map<string, string>();
+    if (teacherIds.length > 0) {
+      const teachers = await this.teacherRepo
+        .createQueryBuilder('t')
+        .where('t.id IN (:...teacherIds)', { teacherIds })
+        .getMany();
+      teachers.forEach((t) => teacherMap.set(t.id, t.name));
+    }
+
+    return rows.map((r) => ({
+      teacher_id: r.tid,
+      teacher_name: teacherMap.get(r.tid) ?? r.tid,
+      count: parseInt(r.cnt, 10),
+    }));
+  }
+
+  async getSubstitutionLog(from: string, to: string, substituteTeacherId?: string, date?: string) {
+    let query = `
+      SELECT l.id, l.date, l.day, l.period, l.classes, l.grades,
+             l.substitute_teacher_id, l.absent_teacher_id,
+             ts.name AS substitute_name, ta.name AS absent_name
+      FROM substitution_log l
+      LEFT JOIN teachers ts ON ts.id = l.substitute_teacher_id
+      LEFT JOIN teachers ta ON ta.id = l.absent_teacher_id
+      WHERE l.date >= $1 AND l.date <= $2
+    `;
+    const params: string[] = [from, to];
+
+    if (substituteTeacherId) {
+      params.push(substituteTeacherId);
+      query += ` AND l.substitute_teacher_id = $${params.length}`;
+    }
+    if (date) {
+      params.push(date);
+      query += ` AND l.date = $${params.length}`;
+    }
+
+    query += ' ORDER BY l.date DESC, l.period ASC';
+
+    return this.logRepo.manager.query(query, params);
+  }
+
   async getTeachers() {
     const distinct = await this.periodRepo
       .createQueryBuilder('p')
@@ -390,6 +443,9 @@ export class SubstitutionService implements OnModuleInit {
 
     // Substitution count accumulated in THIS run (so fair-distribution stays fair within a single run)
     const runSubCount = new Map<string, number>();
+    // Tracks which periods each teacher has already been assigned to as substitute this run
+    // Prevents double-booking a teacher into the same period for two different absent teachers
+    const runSubPeriods = new Map<string, Set<number>>();
 
     // ── Allocation loop ───────────────────────────────────────────────────────
     const assignments: Array<{
@@ -433,6 +489,8 @@ export class SubstitutionService implements OnModuleInit {
           const cp = periodMap.get(`${cid}:${day}:${p.period}`);
           const isFree = !cp || cp.raw === 'FREE';
           if (!isFree) return false;
+          // Prevent double-booking: skip if already assigned to substitute this same period
+          if (runSubPeriods.get(cid)?.has(p.period)) return false;
           const regular = regularPeriodsOnDay.get(cid) ?? 0;
           const subs    = runSubCount.get(cid) ?? 0;
           return regular + subs < MAX_DAILY_PERIODS;
@@ -477,6 +535,9 @@ export class SubstitutionService implements OnModuleInit {
 
         // Track for cap and fair-distribution in subsequent periods this run
         runSubCount.set(bestId, (runSubCount.get(bestId) ?? 0) + 1);
+        // Mark this period as occupied so the teacher isn't double-booked this run
+        if (!runSubPeriods.has(bestId)) runSubPeriods.set(bestId, new Set());
+        runSubPeriods.get(bestId)!.add(p.period);
 
         const subName = activePeriods.find((sp) => sp.teacher_id === bestId)?.teacher?.name ?? bestId;
         const regularPeriodsToday = regularPeriodsOnDay.get(bestId) ?? 0;
