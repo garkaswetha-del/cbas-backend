@@ -251,8 +251,8 @@ export class SubstitutionService implements OnModuleInit {
              l.substitute_teacher_id, l.absent_teacher_id,
              ts.name AS substitute_name, ta.name AS absent_name
       FROM substitution_log l
-      LEFT JOIN teachers ts ON ts.id = l.substitute_teacher_id
-      LEFT JOIN teachers ta ON ta.id = l.absent_teacher_id
+      LEFT JOIN substitution_teachers ts ON ts.id::text = l.substitute_teacher_id
+      LEFT JOIN substitution_teachers ta ON ta.id::text = l.absent_teacher_id
       WHERE l.date >= $1 AND l.date <= $2
     `;
     const params: string[] = [from, to];
