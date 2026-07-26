@@ -31,6 +31,23 @@ export class SubstitutionController {
     return this.service.getTimetableForTeacher(teacherId);
   }
 
+  // GET /substitution/history/summary?from=&to=
+  @Get('history/summary')
+  getSubstitutionSummary(@Query('from') from: string, @Query('to') to: string) {
+    return this.service.getSubstitutionSummary(from, to);
+  }
+
+  // GET /substitution/history/log?from=&to=&substitute_teacher_id=&date=
+  @Get('history/log')
+  getSubstitutionLog(
+    @Query('from') from: string,
+    @Query('to') to: string,
+    @Query('substitute_teacher_id') substituteTeacherId?: string,
+    @Query('date') date?: string,
+  ) {
+    return this.service.getSubstitutionLog(from, to, substituteTeacherId, date);
+  }
+
   // GET /substitution/teachers
   @Get('teachers')
   getTeachers() {
