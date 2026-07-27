@@ -390,7 +390,8 @@ export class SubstitutionService implements OnModuleInit {
       const prof = profiles.get(p.teacher_id)!;
       const grades = enrichGrades((p.grades ?? []).map(Number), p.classes ?? []);
       grades.forEach((g) => prof.grades.add(g));
-      (p.classes ?? []).forEach((c) => prof.classes.add(c));
+      const cls = (p.classes ?? []).filter((c) => c.length > 0);
+      (cls.length > 0 ? cls : this.extractSectionsFromRaw(p.raw)).forEach((c) => prof.classes.add(c));
     }
 
     const allTeacherIds = [...new Set(activePeriods.map((p) => p.teacher_id))];
