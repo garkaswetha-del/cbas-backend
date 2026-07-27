@@ -382,10 +382,12 @@ export class SubstitutionService implements OnModuleInit {
       return enriched;
     };
 
-    // ── Grade/class profiles ──────────────────────────────────────────────────
+    // ── Grade/class profiles (academic periods only) ──────────────────────────
+    // CCA periods are excluded so music/PE teachers don't appear as section
+    // matches for academic substitutions.
     const profiles = new Map<string, { grades: Set<number>; classes: Set<string> }>();
     for (const p of activePeriods) {
-      if (p.raw === 'FREE') continue;
+      if (p.raw === 'FREE' || p.period_type !== 'ACADEMIC') continue;
       if (!profiles.has(p.teacher_id)) profiles.set(p.teacher_id, { grades: new Set(), classes: new Set() });
       const prof = profiles.get(p.teacher_id)!;
       const grades = enrichGrades((p.grades ?? []).map(Number), p.classes ?? []);
@@ -476,6 +478,37 @@ export class SubstitutionService implements OnModuleInit {
         activePeriods.find((p) => p.teacher_id === absentId)?.teacher?.name ?? absentId;
 
       for (const p of absentPeriods) {
+        const rawCls = (p.classes ?? []).filter((c) => c.length > 0);
+        const periodClasses = rawCls.length > 0 ? rawCls : this.extractSectionsFromRaw(p.raw);
+
+        // ── CCA co-teacher rule ───────────────────────────────────────────────
+        // CCA slots are staffed by 2 teachers. If one is absent but the other
+        // is still present, no substitute is needed.
+        if (p.period_type === 'CCA') {
+          const coTeacherPresent = activePeriods.some((op) => {
+            if (op.teacher_id === absentId) return false;
+            if (op.day !== (day as any) || op.period !== p.period || op.period_type !== 'CCA') return false;
+            if (excludedIds.has(op.teacher_id)) return false;
+            const opCls = (op.classes ?? []).filter((c) => c.length > 0);
+            const opResolved = opCls.length > 0 ? opCls : this.extractSectionsFromRaw(op.raw);
+            return periodClasses.some((cls) => opResolved.includes(cls));
+          });
+
+          if (coTeacherPresent) {
+            assignments.push({
+              period: p.period, absent_teacher_id: absentId,
+              absent_teacher_name: absentTeacherName,
+              substitute_id: null, substitute_name: null,
+              substitute_regular_periods: 0,
+              grades: p.grades ?? [], classes: periodClasses, raw: p.raw,
+              reason: 'CCA co-teacher present — substitution not required',
+              cross_stage: false,
+            });
+            continue;
+          }
+          // All co-teachers absent — fall through to normal allocation below
+        }
+
         // ── Step 1: eligible pool — free at this slot AND under daily cap ──
         // A teacher is FREE at (day, period) if:
         //   a) they work this day (have at least one record on this day), AND
@@ -512,9 +545,6 @@ export class SubstitutionService implements OnModuleInit {
           freePool: scored.map(({ name, classes, overlap, weeklyLoad }) => ({ name, classes, overlap, weeklyLoad })),
           chosen: free.length === 0 ? null : scored[0]?.name ?? null,
         });
-
-        const rawCls = (p.classes ?? []).filter((c) => c.length > 0);
-        const periodClasses = rawCls.length > 0 ? rawCls : this.extractSectionsFromRaw(p.raw);
 
         if (free.length === 0) {
           assignments.push({
