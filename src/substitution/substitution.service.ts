@@ -574,13 +574,11 @@ export class SubstitutionService implements OnModuleInit {
       substitute_subs_today: a.substitute_id ? (subCountInRun.get(a.substitute_id) ?? 0) : 0,
     }));
 
-    // ── Persist to substitution_log (replace today's entries for these absences) ──
-    for (const absentId of absentTeacherIds) {
-      await this.logRepo.manager.query(
-        `DELETE FROM substitution_log WHERE date = $1 AND absent_teacher_id = $2`,
-        [date, absentId],
-      );
-    }
+    // ── Persist to substitution_log (replace ALL entries for this date) ──
+    await this.logRepo.manager.query(
+      `DELETE FROM substitution_log WHERE date = $1`,
+      [date],
+    );
     for (const a of finalAssignments.filter((x) => x.substitute_id !== null)) {
       await this.logRepo.manager.query(
         `INSERT INTO substitution_log
