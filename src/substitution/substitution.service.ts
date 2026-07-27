@@ -516,13 +516,17 @@ export class SubstitutionService implements OnModuleInit {
           chosen: free.length === 0 ? null : scored[0]?.name ?? null,
         });
 
+        // Resolve classes with raw-text fallback (same as profile building)
+        const rawClasses = (p.classes ?? []).filter((c) => c.length > 0);
+        const resolvedClasses = rawClasses.length > 0 ? rawClasses : extractSectionsFromRaw(p.raw);
+
         if (free.length === 0) {
           assignments.push({
             period: p.period, absent_teacher_id: absentId,
             absent_teacher_name: absentTeacherName,
             substitute_id: null, substitute_name: null,
             substitute_regular_periods: 0,
-            grades: p.grades ?? [], classes: p.classes ?? [], raw: p.raw,
+            grades: p.grades ?? [], classes: resolvedClasses, raw: p.raw,
             reason: 'No substitute available',
             cross_stage: false,
           });
@@ -551,7 +555,7 @@ export class SubstitutionService implements OnModuleInit {
           absent_teacher_name: absentTeacherName,
           substitute_id: bestId, substitute_name: subName,
           substitute_regular_periods: regularPeriodsToday,
-          grades: p.grades ?? [], classes: p.classes ?? [], raw: p.raw,
+          grades: p.grades ?? [], classes: resolvedClasses, raw: p.raw,
           reason,
           cross_stage: isCrossStage,
         });
