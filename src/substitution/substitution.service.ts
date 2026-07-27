@@ -513,13 +513,16 @@ export class SubstitutionService implements OnModuleInit {
           chosen: free.length === 0 ? null : scored[0]?.name ?? null,
         });
 
+        const rawCls = (p.classes ?? []).filter((c) => c.length > 0);
+        const periodClasses = rawCls.length > 0 ? rawCls : this.extractSectionsFromRaw(p.raw);
+
         if (free.length === 0) {
           assignments.push({
             period: p.period, absent_teacher_id: absentId,
             absent_teacher_name: absentTeacherName,
             substitute_id: null, substitute_name: null,
             substitute_regular_periods: 0,
-            grades: p.grades ?? [], classes: p.classes ?? [], raw: p.raw,
+            grades: p.grades ?? [], classes: periodClasses, raw: p.raw,
             reason: 'No substitute available',
             cross_stage: false,
           });
@@ -548,7 +551,7 @@ export class SubstitutionService implements OnModuleInit {
           absent_teacher_name: absentTeacherName,
           substitute_id: bestId, substitute_name: subName,
           substitute_regular_periods: regularPeriodsToday,
-          grades: p.grades ?? [], classes: p.classes ?? [], raw: p.raw,
+          grades: p.grades ?? [], classes: periodClasses, raw: p.raw,
           reason,
           cross_stage: isCrossStage,
         });
