@@ -289,6 +289,24 @@ export class SubstitutionService implements OnModuleInit {
     return this.logRepo.manager.query(query, params);
   }
 
+  async manualAssign(body: {
+    date: string; day: string; period: number;
+    absent_teacher_id: string; substitute_teacher_id: string;
+  }) {
+    await this.logRepo.manager.query(
+      `DELETE FROM substitution_log WHERE date = $1 AND absent_teacher_id = $2 AND period = $3`,
+      [body.date, body.absent_teacher_id, body.period],
+    );
+    await this.logRepo.manager.query(
+      `INSERT INTO substitution_log
+         (substitute_teacher_id, absent_teacher_id, date, day, period, grades, classes)
+       VALUES ($1, $2, $3, $4, $5, NULL, NULL)`,
+      [body.substitute_teacher_id, body.absent_teacher_id, body.date, body.day, body.period],
+    );
+    const teacher = await this.teacherRepo.findOne({ where: { id: body.substitute_teacher_id } });
+    return { substitute_id: body.substitute_teacher_id, substitute_name: teacher?.name ?? body.substitute_teacher_id };
+  }
+
   async getTeachers() {
     const distinct = await this.periodRepo
       .createQueryBuilder('p')
@@ -481,32 +499,18 @@ export class SubstitutionService implements OnModuleInit {
         const rawCls = (p.classes ?? []).filter((c) => c.length > 0);
         const periodClasses = rawCls.length > 0 ? rawCls : this.extractSectionsFromRaw(p.raw);
 
-        // ── CCA co-teacher rule ───────────────────────────────────────────────
-        // CCA slots are staffed by 2 teachers. If one is absent but the other
-        // is still present, no substitute is needed.
+        // ── CCA: skip auto-allocation, admin assigns manually ────────────────
         if (p.period_type === 'CCA') {
-          const coTeacherPresent = activePeriods.some((op) => {
-            if (op.teacher_id === absentId) return false;
-            if (op.day !== (day as any) || op.period !== p.period || op.period_type !== 'CCA') return false;
-            if (excludedIds.has(op.teacher_id)) return false;
-            const opCls = (op.classes ?? []).filter((c) => c.length > 0);
-            const opResolved = opCls.length > 0 ? opCls : this.extractSectionsFromRaw(op.raw);
-            return periodClasses.some((cls) => opResolved.includes(cls));
+          assignments.push({
+            period: p.period, absent_teacher_id: absentId,
+            absent_teacher_name: absentTeacherName,
+            substitute_id: null, substitute_name: null,
+            substitute_regular_periods: 0,
+            grades: p.grades ?? [], classes: periodClasses, raw: p.raw,
+            reason: 'CCA — assign manually if needed',
+            cross_stage: false,
           });
-
-          if (coTeacherPresent) {
-            assignments.push({
-              period: p.period, absent_teacher_id: absentId,
-              absent_teacher_name: absentTeacherName,
-              substitute_id: null, substitute_name: null,
-              substitute_regular_periods: 0,
-              grades: p.grades ?? [], classes: periodClasses, raw: p.raw,
-              reason: 'CCA co-teacher present — substitution not required',
-              cross_stage: false,
-            });
-            continue;
-          }
-          // All co-teachers absent — fall through to normal allocation below
+          continue;
         }
 
         // ── Step 1: eligible pool — free at this slot AND under daily cap ──

@@ -72,6 +72,15 @@ export class SubstitutionController {
     return this.service.removePermanentException(teacher_id);
   }
 
+  // POST /substitution/manual-assign
+  @Post('manual-assign')
+  manualAssign(@Body() body: {
+    date: string; day: string; period: number;
+    absent_teacher_id: string; substitute_teacher_id: string;
+  }) {
+    return this.service.manualAssign(body);
+  }
+
   // POST /substitution/allocate
   @Post('allocate')
   allocate(@Body() body: {
