@@ -58,6 +58,23 @@ export class SubstitutionService implements OnModuleInit {
     return min;
   }
 
+  private static readonly KNOWN_SECTIONS = [
+    'Edison','Raman','Einstein','Kalam','Satya','Vedha','Shanthi',
+    'Opal','Ruby','Emerald','Diamond',
+    'Mercury','Venus','Mars',
+    'Pegasus','Orion','Centaurus','Hercules',
+    'Meru','Himalaya','Vindhya',
+    'Kuvempu','Bendre','Karantha',
+    'Kaveri','Ganga','Godavari',
+    'Neethi','Yamuna','Kapila',
+  ];
+
+  private extractSectionsFromRaw(raw: string): string[] {
+    if (!raw || raw === 'FREE') return [];
+    const normalized = raw.toLowerCase().replace(/\s+/g, '');
+    return SubstitutionService.KNOWN_SECTIONS.filter((s) => normalized.includes(s.toLowerCase()));
+  }
+
   // Upload + parse a timetable PDF, replacing the currently active batch
   async uploadTimetable(fileBuffer: Buffer, fileName: string) {
     const parsed = await this.parser.parse(fileBuffer, fileName);
@@ -74,18 +91,19 @@ export class SubstitutionService implements OnModuleInit {
 
     await this.periodRepo.update({ is_active: true }, { is_active: false });
 
-    const newPeriods = parsed.periods.map((p) =>
-      this.periodRepo.create({
+    const newPeriods = parsed.periods.map((p) => {
+      const classes = (p.classes ?? []).filter((c) => c.length > 0);
+      return this.periodRepo.create({
         teacher_id: teacherIdByName.get(p.teacher_name),
         day: p.day as TimetablePeriod['day'],
         period: p.period,
         raw: p.raw,
         period_type: p.type as TimetablePeriod['period_type'],
         grades: p.grades,
-        classes: p.classes,
+        classes: classes.length > 0 ? classes : this.extractSectionsFromRaw(p.raw),
         is_active: true,
-      }),
-    );
+      });
+    });
 
     await this.periodRepo.save(newPeriods);
 
@@ -364,25 +382,6 @@ export class SubstitutionService implements OnModuleInit {
       return enriched;
     };
 
-    // Known section names — used to recover classes from raw text when the PDF
-    // parser produced garbled text (e.g. "Kuvem pu" instead of "Kuvempu")
-    const KNOWN_SECTIONS = [
-      'Edison','Raman','Einstein','Kalam','Satya','Vedha','Shanthi',
-      'Opal','Ruby','Emerald','Diamond',
-      'Mercury','Venus','Mars',
-      'Pegasus','Orion','Centaurus','Hercules',
-      'Meru','Himalaya','Vindhya',
-      'Kuvempu','Bendre','Karantha',
-      'Kaveri','Ganga','Godavari',
-      'Neethi','Yamuna','Kapila',
-    ];
-
-    const extractSectionsFromRaw = (raw: string): string[] => {
-      if (!raw || raw === 'FREE') return [];
-      const normalized = raw.toLowerCase().replace(/\s+/g, '');
-      return KNOWN_SECTIONS.filter((s) => normalized.includes(s.toLowerCase()));
-    };
-
     // ── Grade/class profiles ──────────────────────────────────────────────────
     const profiles = new Map<string, { grades: Set<number>; classes: Set<string> }>();
     for (const p of activePeriods) {
@@ -391,10 +390,7 @@ export class SubstitutionService implements OnModuleInit {
       const prof = profiles.get(p.teacher_id)!;
       const grades = enrichGrades((p.grades ?? []).map(Number), p.classes ?? []);
       grades.forEach((g) => prof.grades.add(g));
-      // Use stored classes; fall back to extracting from raw when classes is empty
-      const classes = (p.classes ?? []).filter((c) => c.length > 0);
-      const resolved = classes.length > 0 ? classes : extractSectionsFromRaw(p.raw);
-      resolved.forEach((c) => prof.classes.add(c));
+      (p.classes ?? []).forEach((c) => prof.classes.add(c));
     }
 
     const allTeacherIds = [...new Set(activePeriods.map((p) => p.teacher_id))];
@@ -516,17 +512,13 @@ export class SubstitutionService implements OnModuleInit {
           chosen: free.length === 0 ? null : scored[0]?.name ?? null,
         });
 
-        // Resolve classes with raw-text fallback (same as profile building)
-        const rawClasses = (p.classes ?? []).filter((c) => c.length > 0);
-        const resolvedClasses = rawClasses.length > 0 ? rawClasses : extractSectionsFromRaw(p.raw);
-
         if (free.length === 0) {
           assignments.push({
             period: p.period, absent_teacher_id: absentId,
             absent_teacher_name: absentTeacherName,
             substitute_id: null, substitute_name: null,
             substitute_regular_periods: 0,
-            grades: p.grades ?? [], classes: resolvedClasses, raw: p.raw,
+            grades: p.grades ?? [], classes: p.classes ?? [], raw: p.raw,
             reason: 'No substitute available',
             cross_stage: false,
           });
@@ -555,7 +547,7 @@ export class SubstitutionService implements OnModuleInit {
           absent_teacher_name: absentTeacherName,
           substitute_id: bestId, substitute_name: subName,
           substitute_regular_periods: regularPeriodsToday,
-          grades: p.grades ?? [], classes: resolvedClasses, raw: p.raw,
+          grades: p.grades ?? [], classes: p.classes ?? [], raw: p.raw,
           reason,
           cross_stage: isCrossStage,
         });
