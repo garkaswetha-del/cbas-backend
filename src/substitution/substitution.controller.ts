@@ -88,12 +88,14 @@ export class SubstitutionController {
     date: string;
     absent_teacher_ids: string[];
     temp_unavailable_teacher_ids: string[];
+    on_duty_teacher_ids?: string[];
   }) {
     return this.service.allocate(
       body.day,
       body.date,
       body.absent_teacher_ids || [],
       body.temp_unavailable_teacher_ids || [],
+      body.on_duty_teacher_ids || [],
     );
   }
 

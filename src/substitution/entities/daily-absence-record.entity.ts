@@ -4,6 +4,7 @@ import { Teacher } from './teacher.entity';
 export enum AbsenceStatus {
   ABSENT = 'ABSENT',
   TEMP_UNAVAILABLE = 'TEMP_UNAVAILABLE',
+  ON_DUTY = 'ON_DUTY',
 }
 
 @Entity('daily_absence_records')

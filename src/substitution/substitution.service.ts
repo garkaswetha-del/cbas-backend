@@ -42,6 +42,9 @@ export class SubstitutionService implements OnModuleInit {
     await this.logRepo.manager.query(
       `CREATE INDEX IF NOT EXISTS idx_sub_log_teacher ON substitution_log(substitute_teacher_id)`,
     );
+    await this.logRepo.manager.query(
+      `ALTER TABLE substitution_log ADD COLUMN IF NOT EXISTS absence_type VARCHAR(20) DEFAULT 'ABSENT'`,
+    );
   }
 
   // Minimum grade distance between a period's grades and a teacher's grade profile.
@@ -267,6 +270,7 @@ export class SubstitutionService implements OnModuleInit {
     let query = `
       SELECT l.id, l.date, l.day, l.period, l.classes, l.grades,
              l.substitute_teacher_id, l.absent_teacher_id,
+             COALESCE(l.absence_type, 'ABSENT') AS absence_type,
              ts.name AS substitute_name, ta.name AS absent_name
       FROM substitution_log l
       LEFT JOIN substitution_teachers ts ON ts.id::text = l.substitute_teacher_id
@@ -351,6 +355,7 @@ export class SubstitutionService implements OnModuleInit {
     date: string,
     absentTeacherIds: string[],
     tempUnavailableIds: string[],
+    onDutyTeacherIds: string[] = [],
   ) {
     const activePeriods = await this.periodRepo.find({
       where: { is_active: true },
@@ -361,7 +366,8 @@ export class SubstitutionService implements OnModuleInit {
     const activeExceptions = await this.exceptionRepo.find({ where: { is_active: true } });
     const permanentExceptionIds = activeExceptions.map((e) => e.teacher_id);
     // Rules 2, 3, 4 — excluded from candidacy entirely
-    const excludedIds = new Set([...absentTeacherIds, ...permanentExceptionIds, ...tempUnavailableIds]);
+    const excludedIds = new Set([...absentTeacherIds, ...onDutyTeacherIds, ...permanentExceptionIds, ...tempUnavailableIds]);
+    const onDutySet = new Set(onDutyTeacherIds);
 
     // Rule 1 — fast free-slot lookup: "teacherId:day:period" → period record
     const periodMap = new Map<string, TimetablePeriod>();
@@ -469,6 +475,7 @@ export class SubstitutionService implements OnModuleInit {
       period: number;
       absent_teacher_id: string;
       absent_teacher_name: string;
+      absence_type: 'ABSENT' | 'ON_DUTY';
       substitute_id: string | null;
       substitute_name: string | null;
       substitute_regular_periods: number;
@@ -487,7 +494,8 @@ export class SubstitutionService implements OnModuleInit {
       chosen: string | null;
     }> = [];
 
-    for (const absentId of absentTeacherIds) {
+    for (const absentId of [...absentTeacherIds, ...onDutyTeacherIds]) {
+      const absence_type: 'ABSENT' | 'ON_DUTY' = onDutySet.has(absentId) ? 'ON_DUTY' : 'ABSENT';
       const absentPeriods = activePeriods
         .filter((p) => p.teacher_id === absentId && p.day === (day as any) && p.raw !== 'FREE')
         .sort((a, b) => a.period - b.period);
@@ -508,6 +516,7 @@ export class SubstitutionService implements OnModuleInit {
             substitute_regular_periods: 0,
             grades: p.grades ?? [], classes: periodClasses, raw: p.raw,
             reason: 'CCA — assign manually if needed',
+            absence_type,
             cross_stage: false,
           });
           continue;
@@ -558,6 +567,7 @@ export class SubstitutionService implements OnModuleInit {
             substitute_regular_periods: 0,
             grades: p.grades ?? [], classes: periodClasses, raw: p.raw,
             reason: 'No substitute available',
+            absence_type,
             cross_stage: false,
           });
           continue;
@@ -586,7 +596,7 @@ export class SubstitutionService implements OnModuleInit {
           substitute_id: bestId, substitute_name: subName,
           substitute_regular_periods: regularPeriodsToday,
           grades: p.grades ?? [], classes: periodClasses, raw: p.raw,
-          reason,
+          reason, absence_type,
           cross_stage: isCrossStage,
         });
       }
@@ -616,8 +626,8 @@ export class SubstitutionService implements OnModuleInit {
     for (const a of finalAssignments.filter((x) => x.substitute_id !== null)) {
       await this.logRepo.manager.query(
         `INSERT INTO substitution_log
-           (substitute_teacher_id, absent_teacher_id, date, day, period, grades, classes)
-         VALUES ($1, $2, $3, $4, $5, $6, $7)`,
+           (substitute_teacher_id, absent_teacher_id, date, day, period, grades, classes, absence_type)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8)`,
         [
           a.substitute_id,
           a.absent_teacher_id,
@@ -626,6 +636,7 @@ export class SubstitutionService implements OnModuleInit {
           a.period,
           a.grades.length > 0 ? a.grades.join(',') : null,
           a.classes.length > 0 ? a.classes.join(',') : null,
+          a.absence_type,
         ],
       );
     }
