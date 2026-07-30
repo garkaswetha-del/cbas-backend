@@ -133,8 +133,24 @@ export class StudentsService implements OnModuleInit {
     return student;
   }
 
+  // Generate next CBAS-YYYY-NNNN identifier for the current year
+  private async generateCbasId(): Promise<string> {
+    const year = new Date().getFullYear();
+    const prefix = `CBAS-${year}-`;
+    const [row]: any[] = await this.studentRepo.query(
+      `SELECT admission_no FROM students WHERE admission_no LIKE $1 ORDER BY admission_no DESC LIMIT 1`,
+      [`${prefix}%`],
+    );
+    if (!row) return `${prefix}0001`;
+    const last = parseInt(row.admission_no.slice(prefix.length), 10);
+    return `${prefix}${String(last + 1).padStart(4, '0')}`;
+  }
+
   // Create single student
   async create(data: Partial<Student>) {
+    if (!data.admission_no?.trim()) {
+      data.admission_no = await this.generateCbasId();
+    }
     const student = this.studentRepo.create(data);
     return this.studentRepo.save(student);
   }
@@ -260,6 +276,7 @@ export class StudentsService implements OnModuleInit {
 
         let studentId: string;
         if (!existing) {
+          if (!s.admission_no?.trim()) s.admission_no = await this.generateCbasId();
           const created = await this.studentRepo.save(this.studentRepo.create(s));
           results.created++;
           studentId = created.id;
