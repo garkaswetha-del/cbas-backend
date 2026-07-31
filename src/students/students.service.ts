@@ -599,8 +599,39 @@ export class StudentsService implements OnModuleInit {
     }
   }
 
-  // Get stats
-  async getStats() {
+  // Get stats — when academic_year is given, derive counts from student_enrollments
+  async getStats(academic_year?: string) {
+    const em = this.studentRepo.manager;
+    const tcCount = await this.studentRepo.count({ where: { is_active: false, is_graduated: false } });
+
+    if (academic_year) {
+      const [totalRow] = await em.query(
+        `SELECT COUNT(*) AS total
+         FROM student_enrollments e
+         JOIN students s ON s.id = e.student_id
+         WHERE e.academic_year = $1 AND s.is_active = true`,
+        [academic_year],
+      );
+      const byGrade = await em.query(
+        `SELECT e.class AS grade, COUNT(*) AS count
+         FROM student_enrollments e
+         JOIN students s ON s.id = e.student_id
+         WHERE e.academic_year = $1 AND s.is_active = true
+         GROUP BY e.class ORDER BY e.class ASC`,
+        [academic_year],
+      );
+      const byGender = await em.query(
+        `SELECT s.gender, COUNT(*) AS count
+         FROM student_enrollments e
+         JOIN students s ON s.id = e.student_id
+         WHERE e.academic_year = $1 AND s.is_active = true
+           AND s.gender IS NOT NULL AND s.gender != ''
+         GROUP BY s.gender`,
+        [academic_year],
+      );
+      return { total: parseInt(totalRow.total, 10), byGrade, byGender, tcCount };
+    }
+
     const total = await this.studentRepo.count({ where: { is_active: true } });
     const byGrade = await this.studentRepo
       .createQueryBuilder('student')
@@ -619,7 +650,6 @@ export class StudentsService implements OnModuleInit {
       .andWhere("student.gender != ''")
       .groupBy('student.gender')
       .getRawMany();
-    const tcCount = await this.studentRepo.count({ where: { is_active: false, is_graduated: false } });
     return { total, byGrade, byGender, tcCount };
   }
 }

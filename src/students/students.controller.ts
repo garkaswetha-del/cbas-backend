@@ -21,8 +21,8 @@ export class StudentsController {
   }
 
   @Get('stats')
-  getStats() {
-    return this.studentsService.getStats();
+  getStats(@Query('academic_year') academic_year?: string) {
+    return this.studentsService.getStats(academic_year);
   }
 
   @Get('academic-years')
