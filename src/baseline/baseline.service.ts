@@ -291,23 +291,23 @@ export class BaselineService {
 
     const participation = await this.participationRepo.findOne({ where: { academic_year } });
     const participatingGrades = participation?.participating_grades ?? [];
-    let totalStudents: number;
-    let assessments = allAssessments;
-    if (participatingGrades.length > 0) {
-      const rows = await this.studentRepo.manager.query(
-        `SELECT COUNT(DISTINCT e.student_id) AS count FROM student_enrollments e WHERE e.academic_year = $1 AND e.class = ANY($2::text[])`,
-        [academic_year, participatingGrades]
-      );
-      totalStudents = parseInt(rows[0]?.count || '0');
-      const gradesLower = participatingGrades.map((g: string) => g.toLowerCase());
-      assessments = allAssessments.filter(a => gradesLower.includes((a.grade || '').toLowerCase()));
-    } else {
-      const rows = await this.studentRepo.manager.query(
-        `SELECT COUNT(DISTINCT e.student_id) AS count FROM student_enrollments e WHERE e.academic_year = $1`,
-        [academic_year]
-      );
-      totalStudents = parseInt(rows[0]?.count || '0');
-    }
+
+    // Fetch enrolled student IDs (the authoritative "total" pool)
+    const enrolledRows: { student_id: string }[] = participatingGrades.length > 0
+      ? await this.studentRepo.manager.query(
+          `SELECT e.student_id FROM student_enrollments e WHERE e.academic_year = $1 AND e.class = ANY($2::text[])`,
+          [academic_year, participatingGrades]
+        )
+      : await this.studentRepo.manager.query(
+          `SELECT e.student_id FROM student_enrollments e WHERE e.academic_year = $1`,
+          [academic_year]
+        );
+
+    const totalStudents = enrolledRows.length;
+    const enrolledSet = new Set(enrolledRows.map(r => r.student_id));
+
+    // Only count/compute averages for assessments of actually enrolled students
+    const assessments = allAssessments.filter(a => enrolledSet.has(a.entity_id));
     const assessed = assessments.length;
     const avg = (arr: number[]) => arr.length ? +(arr.reduce((a, b) => a + b, 0) / arr.length).toFixed(1) : 0;
 
