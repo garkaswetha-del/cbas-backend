@@ -285,19 +285,22 @@ export class BaselineService {
 
   // ── School dashboard ───────────────────────────────────────────
   async getSchoolDashboard(academic_year: string, round: string) {
-    const assessments = await this.baselineRepo.find({
+    const allAssessments = await this.baselineRepo.find({
       where: { academic_year, round: round as AssessmentRound, entity_type: EntityType.STUDENT },
     });
 
     const participation = await this.participationRepo.findOne({ where: { academic_year } });
     const participatingGrades = participation?.participating_grades ?? [];
     let totalStudents: number;
+    let assessments = allAssessments;
     if (participatingGrades.length > 0) {
       const rows = await this.studentRepo.manager.query(
         `SELECT COUNT(DISTINCT e.student_id) AS count FROM student_enrollments e WHERE e.academic_year = $1 AND e.class = ANY($2::text[])`,
         [academic_year, participatingGrades]
       );
       totalStudents = parseInt(rows[0]?.count || '0');
+      const gradesLower = participatingGrades.map((g: string) => g.toLowerCase());
+      assessments = allAssessments.filter(a => gradesLower.includes((a.grade || '').toLowerCase()));
     } else {
       const rows = await this.studentRepo.manager.query(
         `SELECT COUNT(DISTINCT e.student_id) AS count FROM student_enrollments e WHERE e.academic_year = $1`,
