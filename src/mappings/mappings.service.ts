@@ -54,9 +54,22 @@ export class MappingsService {
   }
 
   async getAllTeachersWithMappings(academic_year: string) {
-    const teachers = await this.userRepo.find({ where: { role: UserRole.TEACHER, is_active: true }, order: { name: 'ASC' } });
+    const teachers = await this.userRepo.find({
+      where: [
+        { role: UserRole.TEACHER,   is_active: true },
+        { role: UserRole.AHM,       is_active: true },
+        { role: UserRole.PRINCIPAL, is_active: true },
+      ],
+      order: { name: 'ASC' },
+    });
     const mappings = await this.mappingRepo.find({ where: { academic_year, is_active: true } });
-    return teachers.map(t => ({ teacher_id: t.id, teacher_name: t.name, mappings: mappings.filter(m => m.teacher_id === t.id) }));
+    return teachers.map(t => ({
+      id: t.id,
+      name: t.name,
+      email: t.email,
+      role: t.role,
+      mappings: mappings.filter(m => m.teacher_id === t.id),
+    }));
   }
 
   async getTeacherMappings(teacher_id: string, academic_year: string) {
