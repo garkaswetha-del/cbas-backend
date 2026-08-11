@@ -72,6 +72,7 @@ import { SowModule } from './sow/sow.module';
           AuditLog,
           Teacher, TimetablePeriod, PermanentExceptionTeacher, DailyAbsenceRecord,
         ];
+        const syncSchema = config.get<string>('TYPEORM_SYNC') === 'true';
         if (databaseUrl) {
           return {
             type: 'postgres',
@@ -79,7 +80,7 @@ import { SowModule } from './sow/sow.module';
             ssl: { rejectUnauthorized: false },
             extra: { max: 40 },
             entities,
-            synchronize: false,
+            synchronize: syncSchema,
             migrationsRun: true,
             migrations: [__dirname + '/migrations/*.js'],
             logging: false,
@@ -93,7 +94,7 @@ import { SowModule } from './sow/sow.module';
           password: config.get<string>('DB_PASSWORD'),
           database: config.get<string>('DB_NAME'),
           entities,
-          synchronize: false,
+          synchronize: syncSchema,
           migrationsRun: true,
           migrations: [__dirname + '/migrations/*.js'],
           logging: false,
