@@ -105,12 +105,14 @@ export class MappingsService {
       const activeMappings = data.mappings as any[];
       const grades = [...new Set(activeMappings.map((m: any) => m.grade).filter(Boolean))] as string[];
       const sections = [...new Set(activeMappings.map((m: any) => m.section).filter(Boolean))] as string[];
+      const subjects = [...new Set(activeMappings.map((m: any) => m.subject).filter(Boolean))] as string[];
       const classTeacherRow = activeMappings.find((m: any) => m.is_class_teacher);
       const class_teacher_of = classTeacherRow
         ? `${classTeacherRow.grade} ${classTeacherRow.section}`
         : '';
 
       await this.userRepo.update(teacher.id, {
+        subjects,
         assigned_classes: grades,
         assigned_sections: sections,
         class_teacher_of,
