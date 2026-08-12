@@ -77,11 +77,10 @@ export class MappingsService {
   }
 
   async saveTeacherMappings(data: any) {
-    await this.mappingRepo.createQueryBuilder()
-      .update()
-      .set({ is_active: false })
-      .where('teacher_id = :tid AND academic_year = :year', { tid: data.teacher_id, year: data.academic_year })
-      .execute();
+    await this.mappingRepo.manager.query(
+      `UPDATE teacher_mappings SET is_active = false WHERE teacher_id = $1 AND academic_year = $2`,
+      [data.teacher_id, data.academic_year],
+    );
 
     const teacher = await this.userRepo.findOne({ where: { id: data.teacher_id } });
 
