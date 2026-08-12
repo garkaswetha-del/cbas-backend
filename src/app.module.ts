@@ -55,6 +55,7 @@ import { DailyAbsenceRecord } from './substitution/entities/daily-absence-record
 import { SubstitutionModule } from './substitution/substitution.module';
 import { CalendarModule } from './calendar/calendar.module';
 import { SowModule } from './sow/sow.module';
+import { GradeSubjectsModule } from './grade-subjects/grade-subjects.module';
 
 @Module({
   imports: [
@@ -127,6 +128,7 @@ import { SowModule } from './sow/sow.module';
     SubstitutionModule,
     CalendarModule,
     SowModule,
+    GradeSubjectsModule,
   ],
   providers: [
     { provide: APP_INTERCEPTOR, useClass: AuditLogInterceptor },
