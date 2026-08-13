@@ -99,6 +99,8 @@ export class LessonPlansService implements OnModuleInit {
     `);
     await this.dataSource.query(`CREATE INDEX IF NOT EXISTS idx_lp_teacher ON lesson_plans(teacher_id, academic_year)`);
     await this.dataSource.query(`CREATE INDEX IF NOT EXISTS idx_lp_status  ON lesson_plans(status, academic_year)`);
+    await this.dataSource.query(`ALTER TABLE lesson_plans ADD COLUMN IF NOT EXISTS lp_number INTEGER`);
+    await this.dataSource.query(`ALTER TABLE lesson_plans ADD COLUMN IF NOT EXISTS total_lps  INTEGER`);
 
     await this.dataSource.query(`
       CREATE TABLE IF NOT EXISTS lesson_plan_comments (
@@ -431,6 +433,181 @@ JSON structure:
     const text = await this.callGroq(prompt, 2000);
     const generated = this.parseJson(text);
     return { ...generated, source: 'ai_generated', ai_parameters: params };
+  }
+
+  // ── AI: Suggest LP count for a chapter ───────────────────────────────────
+
+  async suggestLpCount(data: { grade: string; subject: string; chapter_name: string }) {
+    const chapterRows = await this.dataSource.query(
+      `SELECT content_text FROM ncert_chapters
+       WHERE grade=$1 AND subject=$2 AND chapter_name ILIKE $3 LIMIT 1`,
+      [data.grade, data.subject, `%${data.chapter_name}%`],
+    );
+    const chapterContent = (chapterRows[0]?.content_text || '').slice(0, 15000);
+
+    if (!chapterContent) {
+      return { suggested_lps: 3, reason: 'No chapter content uploaded. Using default estimate of 3 lesson plans.' };
+    }
+
+    const prompt = `You are a CBSE curriculum expert for Grade ${data.grade} ${data.subject}.
+
+Analyze this NCERT chapter and suggest how many 45-minute lesson plans are needed to teach it thoroughly.
+
+Chapter: ${data.chapter_name}
+Content:
+${chapterContent}
+
+Consider:
+- Each lesson plan is one 45-minute class
+- Students need time to understand, explore, and practice each concept
+- The chapter should be divided into logical, self-contained sections
+- CBSE depth requirements for Grade ${data.grade}
+- Typical pace for Grade ${data.grade} students
+
+Return ONLY valid JSON, no markdown:
+{"suggested_lps": 4, "reason": "one sentence explaining why this number"}`;
+
+    const text = await this.callGroq(prompt, 200);
+    try {
+      return this.parseJson(text);
+    } catch {
+      return { suggested_lps: 3, reason: 'Could not parse AI suggestion. Defaulting to 3 lesson plans.' };
+    }
+  }
+
+  // ── AI: Generate all LPs for a chapter ───────────────────────────────────
+
+  async generateChapterPlans(data: {
+    teacher_id: string; academic_year: string;
+    grade: string; section: string; subject: string;
+    chapter_name: string; total_lps: number;
+    duration: number; start_date?: string;
+    parameter_overrides?: any;
+  }) {
+    const chapterRows = await this.dataSource.query(
+      `SELECT content_text FROM ncert_chapters
+       WHERE grade=$1 AND subject=$2 AND chapter_name ILIKE $3 LIMIT 1`,
+      [data.grade, data.subject, `%${data.chapter_name}%`],
+    );
+    const chapterContent = (chapterRows[0]?.content_text || '').slice(0, 30000);
+
+    const storedProfile = await this.getProfile(data.teacher_id);
+    const params = { ...this.defaultProfile(), ...(storedProfile || {}), ...(data.parameter_overrides || {}) };
+    const [teacherPct, studentPct] = (params.talk_ratio || '40:60').split(':');
+
+    const prompt = `You are a CBSE-aligned lesson plan writer for Wisdom School, India.
+
+Generate ${data.total_lps} sequential lesson plans to complete teaching the chapter "${data.chapter_name}" for Grade ${data.grade} ${data.subject}.
+
+FULL CHAPTER CONTENT:
+${chapterContent}
+
+TEACHING PARAMETERS (apply consistently to ALL lesson plans):
+- Talk Ratio: Teacher ${teacherPct}% / Students ${studentPct}%
+- Learning Approach: ${params.learning_approach}
+- Collaboration Mode: ${params.collaboration_mode}
+- Bloom's Taxonomy Level: ${params.blooms_level}
+- Learning Style Focus: ${params.learning_style}
+- Real-World / Indian Context: ${params.real_world_connection}
+- 21st Century Skills: ${(params.skills_21c || []).join(', ')}
+- Learning Type: ${params.learning_type}
+- Art Integration: ${params.art_integration ? (params.art_type || 'yes') : 'none'}
+- HOTS: ${params.hots ? 'yes — include higher-order thinking in Evaluate of each LP' : 'no'}
+- Formative Assessment: ${params.formative_assessment}
+- Questioning Technique: ${params.questioning_technique}
+- TLM: ${params.tlm_type}
+- Differentiation: ${params.differentiation}
+
+RULES:
+- Divide the chapter content into ${data.total_lps} logical, sequential sections
+- LP 1 covers the introduction and foundational concepts
+- Each subsequent LP builds directly on the previous one — reference what was covered before
+- The final LP should consolidate the entire chapter
+- Each class is ${data.duration} minutes — 5E durations must sum to ${data.duration}
+- All content must come from the chapter provided
+- Students must be actively engaged ${studentPct}% of the time
+- Return ONLY a valid JSON array, no markdown fences, no extra text
+
+JSON structure — array of ${data.total_lps} objects:
+[
+  {
+    "lesson_number": 1,
+    "lesson_name": "descriptive sub-topic title",
+    "focus_question": "central question this LP answers",
+    "learning_objectives": "2-3 clear objectives",
+    "key_vocabulary": "key terms with brief meanings (only those covered in THIS LP)",
+    "possible_misconceptions": "2-3 common errors for THIS content",
+    "materials": "materials needed",
+    "digital_resources": "specific video or simulation",
+    "tech_contingency": "offline backup",
+    "differentiation_strategies": "for struggling and advanced learners",
+    "interdisciplinary_approach": "link to another subject",
+    "engage_content": "hook activity (must activate prior knowledge from LP before this one, except LP 1)",
+    "engage_duration": 5,
+    "explore_content": "hands-on discovery",
+    "explore_duration": 10,
+    "explain_content": "direct instruction",
+    "explain_duration": 15,
+    "extend_content": "application activity",
+    "extend_duration": 10,
+    "evaluate_content": "formative check",
+    "evaluate_duration": 5,
+    "rework": "remediation strategy",
+    "homework": "task that prepares for the NEXT lesson plan"
+  }
+]`;
+
+    const text = await this.callGroq(prompt, 8000);
+    let plans: any[] = [];
+    try {
+      plans = this.parseJson(text);
+      if (!Array.isArray(plans)) plans = [plans];
+    } catch {
+      throw new Error('AI did not return a valid JSON array');
+    }
+
+    // Save all plans to DB
+    const created: any[] = [];
+    for (let i = 0; i < plans.length; i++) {
+      const p = plans[i];
+      const lpNum = i + 1;
+      let date: string | null = null;
+      if (data.start_date) {
+        const d = new Date(data.start_date);
+        d.setDate(d.getDate() + i * 7); // space 1 week apart by default
+        date = d.toISOString().slice(0, 10);
+      }
+
+      const rows = await this.dataSource.query(
+        `INSERT INTO lesson_plans
+           (teacher_id, academic_year, grade, section, subject, chapter_name, lesson_name,
+            date, duration, focus_question, learning_objectives, key_vocabulary,
+            possible_misconceptions, materials, digital_resources, tech_contingency,
+            differentiation_strategies, interdisciplinary_approach,
+            engage_content, engage_duration, explore_content, explore_duration,
+            explain_content, explain_duration, extend_content, extend_duration,
+            evaluate_content, evaluate_duration, rework, homework,
+            ai_parameters, source, lp_number, total_lps)
+         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,
+                 $19,$20,$21,$22,$23,$24,$25,$26,$27,$28,$29,$30,$31,$32,$33,$34)
+         RETURNING id`,
+        [
+          data.teacher_id, data.academic_year, data.grade, data.section, data.subject,
+          data.chapter_name, p.lesson_name, date, data.duration,
+          p.focus_question, p.learning_objectives, p.key_vocabulary,
+          p.possible_misconceptions, p.materials, p.digital_resources, p.tech_contingency,
+          p.differentiation_strategies, p.interdisciplinary_approach,
+          p.engage_content, p.engage_duration, p.explore_content, p.explore_duration,
+          p.explain_content, p.explain_duration, p.extend_content, p.extend_duration,
+          p.evaluate_content, p.evaluate_duration, p.rework, p.homework,
+          JSON.stringify({ ...params, total_lps: data.total_lps }), 'ai_generated',
+          lpNum, data.total_lps,
+        ],
+      );
+      created.push({ id: rows[0].id, lesson_number: lpNum, lesson_name: p.lesson_name });
+    }
+
+    return { ok: true, total: created.length, plans: created };
   }
 
   // ── AI: Generate Worksheet ────────────────────────────────────────────────

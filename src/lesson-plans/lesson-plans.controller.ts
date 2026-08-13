@@ -113,6 +113,16 @@ export class LessonPlansController {
     return this.svc.generateLessonPlan(body);
   }
 
+  @Post('ai/suggest-lp-count')
+  suggestLpCount(@Body() body: { grade: string; subject: string; chapter_name: string }) {
+    return this.svc.suggestLpCount(body);
+  }
+
+  @Post('ai/generate-chapter')
+  generateChapterPlans(@Body() body: any) {
+    return this.svc.generateChapterPlans(body);
+  }
+
   @Post(':id/generate-worksheet')
   generateWorksheet(@Param('id') id: string) {
     return this.svc.generateWorksheet(id);
