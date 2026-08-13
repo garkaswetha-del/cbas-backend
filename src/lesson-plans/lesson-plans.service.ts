@@ -362,7 +362,7 @@ export class LessonPlansService implements OnModuleInit {
        WHERE grade=$1 AND subject=$2 AND chapter_name ILIKE $3 LIMIT 1`,
       [data.grade, data.subject, `%${data.chapter_name}%`],
     );
-    const chapterContent = (chapterRows[0]?.content_text || '').slice(0, 8000);
+    const chapterContent = (chapterRows[0]?.content_text || '').slice(0, 30000);
 
     const storedProfile = await this.getProfile(data.teacher_id);
     const params = { ...this.defaultProfile(), ...(storedProfile || {}), ...(data.parameter_overrides || {}) };
