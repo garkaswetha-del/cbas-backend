@@ -56,6 +56,7 @@ import { SubstitutionModule } from './substitution/substitution.module';
 import { CalendarModule } from './calendar/calendar.module';
 import { SowModule } from './sow/sow.module';
 import { GradeSubjectsModule } from './grade-subjects/grade-subjects.module';
+import { LessonPlansModule } from './lesson-plans/lesson-plans.module';
 
 @Module({
   imports: [
@@ -129,6 +130,7 @@ import { GradeSubjectsModule } from './grade-subjects/grade-subjects.module';
     CalendarModule,
     SowModule,
     GradeSubjectsModule,
+    LessonPlansModule,
   ],
   providers: [
     { provide: APP_INTERCEPTOR, useClass: AuditLogInterceptor },
