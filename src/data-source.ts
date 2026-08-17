@@ -23,6 +23,7 @@ import { TeacherAssignment } from './teacher-assignments/entities/teacher-assign
 import { Section } from './sections/entities/section.entity';
 import { BaselineConfigV2 } from './baseline/entities/baseline-config-v2.entity';
 import { BaselineParticipation } from './baseline/entities/baseline-participation.entity';
+import { TeacherModuleStep } from './learning-modules/entities/teacher-module-step.entity';
 
 dotenv.config();
 
@@ -33,6 +34,7 @@ const entities = [
   StudentCompetencyScore, TeacherObservation, ExamConfig, ExamMarks,
   TeacherMapping, HomeworkRecord, TeacherAssignment, Section,
   BaselineConfigV2, BaselineParticipation,
+  TeacherModuleStep,
 ];
 
 const migrations = ['src/migrations/*.ts'];

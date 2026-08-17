@@ -7,6 +7,7 @@ import { TeacherObservation } from '../observation/entities/teacher-observation.
 import { TeacherMapping } from '../mappings/entities/teacher-mapping.entity/teacher-mapping.entity';
 import { ExamMarks } from '../pasa/entities/exam-marks.entity/exam-marks.entity';
 import { BaselineAssessment } from '../assessments/entities/baseline-assessment.entity/baseline-assessment.entity';
+import { LearningModulesService } from '../learning-modules/learning-modules.service';
 
 @Injectable()
 export class PortfolioService {
@@ -17,6 +18,7 @@ export class PortfolioService {
     @InjectRepository(TeacherMapping) private mappingRepo: Repository<TeacherMapping>,
     @InjectRepository(ExamMarks) private marksRepo: Repository<ExamMarks>,
     @InjectRepository(BaselineAssessment) private baselineRepo: Repository<BaselineAssessment>,
+    private learningModulesService: LearningModulesService,
   ) {}
 
   async getTeacherPortfolio(teacher_id: string) {
@@ -122,6 +124,16 @@ export class PortfolioService {
       rounds,
     }));
 
+    // Learning module stage progress
+    const allYears = [...new Set(baselineRaw.map(b => b.academic_year).filter(Boolean))];
+    const latestYear = allYears.sort().reverse()[0] || '';
+    let learningProgress: any = null;
+    if (latestYear) {
+      try {
+        learningProgress = await this.learningModulesService.getStageSummary(teacher_id, latestYear);
+      } catch { /* non-critical */ }
+    }
+
     return {
       profile: {
         id: teacher.id,
@@ -139,6 +151,7 @@ export class PortfolioService {
       observation_history: obsHistory,
       teaching_history: teachingHistory.sort((a, b) => b.academic_year.localeCompare(a.academic_year)),
       baseline_history: baselineHistory,
+      learning_progress: learningProgress,
     };
   }
 }

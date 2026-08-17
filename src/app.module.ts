@@ -28,6 +28,8 @@ import { AppraisalModule } from './appraisal/appraisal.module';
 import { UsersModule } from './users/users.module';
 import { BaselineModule } from './baseline/baseline.module';
 import { LearningLinksModule } from './learning-links/learning-links.module';
+import { LearningModulesModule } from './learning-modules/learning-modules.module';
+import { TeacherModuleStep } from './learning-modules/entities/teacher-module-step.entity';
 import { ActivitiesModule } from './activities/activities.module';
 import { ObservationModule } from './observation/observation.module';
 import { PasaModule } from './pasa/pasa.module';
@@ -73,6 +75,7 @@ import { LessonPlansModule } from './lesson-plans/lesson-plans.module';
           TeacherMapping, HomeworkRecord, TeacherAssignment, Section, BaselineConfigV2, BaselineParticipation,
           AuditLog,
           Teacher, TimetablePeriod, PermanentExceptionTeacher, DailyAbsenceRecord,
+          TeacherModuleStep,
         ];
         const syncSchema = config.get<string>('TYPEORM_SYNC') === 'true';
         if (databaseUrl) {
@@ -116,6 +119,7 @@ import { LessonPlansModule } from './lesson-plans/lesson-plans.module';
     UsersModule,
     BaselineModule,
     LearningLinksModule,
+    LearningModulesModule,
     ActivitiesModule,
     ObservationModule,
     PasaModule,

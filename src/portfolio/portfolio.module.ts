@@ -8,12 +8,14 @@ import { TeacherObservation } from '../observation/entities/teacher-observation.
 import { TeacherMapping } from '../mappings/entities/teacher-mapping.entity/teacher-mapping.entity';
 import { ExamMarks } from '../pasa/entities/exam-marks.entity/exam-marks.entity';
 import { BaselineAssessment } from '../assessments/entities/baseline-assessment.entity/baseline-assessment.entity';
+import { LearningModulesModule } from '../learning-modules/learning-modules.module';
 
 @Module({
   imports: [
     TypeOrmModule.forFeature([
       User, TeacherAppraisal, TeacherObservation, TeacherMapping, ExamMarks, BaselineAssessment,
     ]),
+    LearningModulesModule,
   ],
   controllers: [PortfolioController],
   providers: [PortfolioService],
