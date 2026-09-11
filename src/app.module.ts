@@ -59,6 +59,9 @@ import { CalendarModule } from './calendar/calendar.module';
 import { SowModule } from './sow/sow.module';
 import { GradeSubjectsModule } from './grade-subjects/grade-subjects.module';
 import { LessonPlansModule } from './lesson-plans/lesson-plans.module';
+import { GradePriorMarksModule } from './grade-prior-marks/grade-prior-marks.module';
+import { GradePriorMarks } from './grade-prior-marks/entities/grade-prior-marks.entity';
+import { GradeSubjectGoal } from './grade-prior-marks/entities/grade-subject-goal.entity';
 
 @Module({
   imports: [
@@ -75,7 +78,7 @@ import { LessonPlansModule } from './lesson-plans/lesson-plans.module';
           TeacherMapping, HomeworkRecord, TeacherAssignment, Section, BaselineConfigV2, BaselineParticipation,
           AuditLog,
           Teacher, TimetablePeriod, PermanentExceptionTeacher, DailyAbsenceRecord,
-          TeacherModuleStep,
+          TeacherModuleStep, GradePriorMarks, GradeSubjectGoal,
         ];
         const syncSchema = config.get<string>('TYPEORM_SYNC') === 'true';
         if (databaseUrl) {
@@ -135,6 +138,7 @@ import { LessonPlansModule } from './lesson-plans/lesson-plans.module';
     SowModule,
     GradeSubjectsModule,
     LessonPlansModule,
+    GradePriorMarksModule,
   ],
   providers: [
     { provide: APP_INTERCEPTOR, useClass: AuditLogInterceptor },

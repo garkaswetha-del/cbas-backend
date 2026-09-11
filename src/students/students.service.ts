@@ -253,10 +253,10 @@ export class StudentsService implements OnModuleInit {
       try {
         let existing: Student | null = null;
 
-        // 1. Match by admission_no (most reliable)
+        // 1. Match by admission_no (most reliable) — include inactive so TC students aren't duplicated
         if (s.admission_no?.trim()) {
           existing = await this.studentRepo.findOne({
-            where: { admission_no: s.admission_no.trim(), is_active: true }
+            where: { admission_no: s.admission_no.trim() }
           });
         }
 

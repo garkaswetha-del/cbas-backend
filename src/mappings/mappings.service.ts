@@ -100,8 +100,16 @@ export class MappingsService {
       }));
     }
 
-    // Sync users table so getTeacherDashboardMappings stays accurate
-    if (teacher) {
+    // Sync users table so getTeacherDashboardMappings stays accurate — but ONLY for the
+    // current academic year. assigned_classes/assigned_sections/subjects/class_teacher_of
+    // on the users table have no year field (one value per teacher, period), so syncing
+    // them on a save for any other year would silently overwrite that shared value with
+    // the wrong year's data, corrupting whatever past/future year was relying on it as
+    // a fallback (see getTeacherDashboardMappings below).
+    const now = new Date();
+    const curYr = now.getMonth() >= 5 ? now.getFullYear() : now.getFullYear() - 1;
+    const currentAcademicYear = `${curYr}-${String(curYr + 1).slice(2)}`;
+    if (teacher && data.academic_year === currentAcademicYear) {
       const activeMappings = data.mappings as any[];
       const grades = [...new Set(activeMappings.map((m: any) => m.grade).filter(Boolean))] as string[];
       const sections = [...new Set(activeMappings.map((m: any) => m.section).filter(Boolean))] as string[];
@@ -137,12 +145,16 @@ export class MappingsService {
     });
 
     if (dbMappings.length === 0) {
-      // For past years with no teacher_mappings rows, fall back to users table fields
+      // The users-table fields (assigned_classes/class_teacher_of) hold ONE value with no
+      // year attached — they only ever reflect the CURRENT year's data (see the matching
+      // guard in saveTeacherMappings above). So they may only stand in for the current year
+      // when it has no real row of its own yet. Any other year with no real row genuinely
+      // has no recorded data — show that honestly instead of borrowing another year's value.
       const now = new Date();
       const curYr = now.getMonth() >= 5 ? now.getFullYear() : now.getFullYear() - 1;
       const currentYear = `${curYr}-${String(curYr + 1).slice(2)}`;
-      const isPastYear = academic_year < currentYear;
-      if (isPastYear && user.assigned_classes?.length) {
+      const isCurrentYear = academic_year === currentYear;
+      if (isCurrentYear && user.assigned_classes?.length) {
         const classes = user.assigned_classes || [];
         const ctParts = user.class_teacher_of ? user.class_teacher_of.split(' ') : [];
         const ctGrade = ctParts.length >= 2 ? ctParts.slice(0, -1).join(' ') : null;

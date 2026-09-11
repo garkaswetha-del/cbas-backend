@@ -1,4 +1,4 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
+import { Injectable, NotFoundException, ForbiddenException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { TeacherAppraisal } from '../assessments/entities/teacher-appraisal.entity/teacher-appraisal.entity';
@@ -66,6 +66,12 @@ export class AppraisalService {
     const existing = await this.appraisalRepo.findOne({
       where: { teacher_id, academic_year: data.academic_year },
     });
+
+    if (existing?.is_shared) {
+      throw new ForbiddenException(
+        'This appraisal has already been shared with the teacher and is locked. Recall it first before making changes.',
+      );
+    }
 
     // Merge incoming data with existing record so partial saves don't wipe untouched fields
     const merged: any = existing ? { ...existing, ...data } : { ...data };
