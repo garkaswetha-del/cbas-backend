@@ -83,4 +83,36 @@ Respond with only the JSON object.`;
       return {};
     }
   }
+
+  // NCF-aligned interview questions, scoped to the subject + school stage the candidate applied for.
+  async generateInterviewQuestions(subject: string, stage: string): Promise<string[]> {
+    const groqKey = process.env.GROQ_API_KEY || '';
+    if (!groqKey) return [];
+
+    const prompt = `You are helping a school interviewer prepare questions for a teaching candidate's interview.
+Generate 10 interview questions aligned with India's National Curriculum Framework (NCF), for a candidate applying
+to teach ${subject || 'a general subject'} at the ${stage || 'unspecified'} stage (Foundation/Preparatory/Middle/Secondary).
+Mix pedagogy/teaching-method questions, subject-content knowledge questions, and classroom-management/child-development
+questions appropriate for that stage.
+Return STRICT JSON ONLY (no markdown, no commentary): { "questions": ["...", "..."] }`;
+
+    try {
+      const res = await axios.post(
+        'https://api.groq.com/openai/v1/chat/completions',
+        {
+          model: GROQ_MODEL,
+          messages: [{ role: 'user', content: prompt }],
+          temperature: 0.5,
+          response_format: { type: 'json_object' },
+        },
+        { headers: { Authorization: `Bearer ${groqKey}` }, timeout: 30000 },
+      );
+      const content = res.data?.choices?.[0]?.message?.content || '{}';
+      const parsed = JSON.parse(content);
+      return Array.isArray(parsed.questions) ? parsed.questions : [];
+    } catch (e) {
+      this.logger.warn(`Groq question generation failed: ${(e as Error).message}`);
+      return [];
+    }
+  }
 }

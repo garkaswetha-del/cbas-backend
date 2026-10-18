@@ -28,6 +28,14 @@ export class HrApplicantsService {
     return row;
   }
 
+  async getInterviewQuestions(id: string) {
+    const applicant = await this.findOne(id);
+    const questions = await this.resumeParser.generateInterviewQuestions(
+      applicant.subject_applied_for, applicant.school_stage,
+    );
+    return { questions };
+  }
+
   async create(data: Partial<HrApplicant>) {
     return this.repo.save(this.repo.create({ ...data, stage: data.stage || 'applied' }));
   }

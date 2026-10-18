@@ -25,10 +25,14 @@ export class HrApplicant {
   @Column({ type: 'decimal', precision: 10, scale: 2, nullable: true }) previous_salary: number;
   @Column({ type: 'decimal', precision: 10, scale: 2, nullable: true }) expected_salary: number;
   @Column({ nullable: true }) subject_applied_for: string;
+  // Foundation / Preparatory / Middle / Secondary — scopes AI-generated NCF interview questions
+  @Column({ nullable: true }) school_stage: string;
 
   @Column({ nullable: true }) source_portal: string;
   // data URI (same pattern the app already uses for photos) — survives redeploys, no object storage needed
   @Column({ nullable: true, type: 'text' }) resume_file: string;
+  // base64 PDF, same data-URI pattern — auto-generated the moment a candidate is selected
+  @Column({ nullable: true, type: 'text' }) appointment_letter: string;
   @Column({ type: 'jsonb', default: {} }) extra_json: Record<string, any>;
 
   @Column({ default: false }) is_shortlisted: boolean;

@@ -13,6 +13,7 @@ import { HrInductionController } from './hr-induction.controller';
 import { HrResumeParserService } from './hr-resume-parser.service';
 import { HrIntakeService } from './hr-intake.service';
 import { HrIntakeController } from './hr-intake.controller';
+import { HrAppointmentLetterService } from './hr-appointment-letter.service';
 import { UsersModule } from '../users/users.module';
 
 @Module({
@@ -21,6 +22,6 @@ import { UsersModule } from '../users/users.module';
     UsersModule,
   ],
   controllers: [HrApplicantsController, HrInterviewsController, HrInductionController, HrIntakeController],
-  providers: [HrApplicantsService, HrInterviewsService, HrInductionService, HrResumeParserService, HrIntakeService],
+  providers: [HrApplicantsService, HrInterviewsService, HrInductionService, HrResumeParserService, HrIntakeService, HrAppointmentLetterService],
 })
 export class HrModule {}

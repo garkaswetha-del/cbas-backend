@@ -16,6 +16,12 @@ export class HrApplicantsController {
     return this.service.findOne(id);
   }
 
+  // AI-generated, NCF-aligned interview questions scoped to this candidate's subject + stage
+  @Get(':id/interview-questions')
+  getInterviewQuestions(@Param('id') id: string) {
+    return this.service.getInterviewQuestions(id);
+  }
+
   @Post()
   create(@Body() body: any) {
     return this.service.create(body);

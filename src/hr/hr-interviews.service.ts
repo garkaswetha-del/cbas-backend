@@ -6,6 +6,7 @@ import { HrApplicant } from './entities/hr-applicant.entity';
 import { HrInductionVideo } from './entities/hr-induction-video.entity';
 import { HrInductionProgress } from './entities/hr-induction-progress.entity';
 import { UsersService } from '../users/users.service';
+import { HrAppointmentLetterService } from './hr-appointment-letter.service';
 
 function autoPassword(name: string): string {
   const first = (name || 'candidate').trim().split(/\s+/)[0] || 'candidate';
@@ -24,6 +25,7 @@ export class HrInterviewsService {
     @InjectRepository(HrInductionProgress)
     private progressRepo: Repository<HrInductionProgress>,
     private usersService: UsersService,
+    private appointmentLetterService: HrAppointmentLetterService,
   ) {}
 
   private async getApplicant(applicant_id: string) {
@@ -154,6 +156,11 @@ export class HrInterviewsService {
     } else {
       await this.applicantRepo.update(applicant.id, { stage: 'selected' });
     }
+
+    // Auto-generate the appointment letter the moment they're selected
+    const schoolName = process.env.SCHOOL_NAME || 'Wisdom School';
+    const letter = await this.appointmentLetterService.generate(applicant, schoolName);
+    await this.applicantRepo.update(applicant.id, { appointment_letter: letter });
 
     return { result, applicant_id: applicant.id, user_id: userId, temp_password: tempPassword };
   }
