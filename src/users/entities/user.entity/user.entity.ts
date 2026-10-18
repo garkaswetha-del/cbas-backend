@@ -77,6 +77,14 @@ export class User {
   @Column({ select: false, nullable: true, default: false })
   over_salary_cap: boolean;
 
+  // HR induction: true while a newly-selected candidate still has induction videos
+  // to finish. Frontend routes them to an induction-only screen until this flips
+  // false (on "Hire"), at which point they fall through to the normal teacher flow.
+  // NOTE: only safe to read/write once migration 1798 (AddIsInductingToUsers) has
+  // actually run on the target database — see that migration's comment.
+  @Column({ nullable: true, default: false })
+  is_inducting: boolean;
+
   @CreateDateColumn()
   created_at: Date;
 

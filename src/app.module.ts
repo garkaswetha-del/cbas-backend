@@ -1,6 +1,7 @@
 import { Module } from '@nestjs/common';
 import { APP_INTERCEPTOR } from '@nestjs/core';
 import { ConfigModule, ConfigService } from '@nestjs/config';
+import { ScheduleModule } from '@nestjs/schedule';
 import { TypeOrmModule, TypeOrmModuleOptions } from '@nestjs/typeorm';
 import { Student } from './students/entities/student.entity/student.entity';
 import { User } from './users/entities/user.entity/user.entity';
@@ -62,10 +63,16 @@ import { LessonPlansModule } from './lesson-plans/lesson-plans.module';
 import { GradePriorMarksModule } from './grade-prior-marks/grade-prior-marks.module';
 import { GradePriorMarks } from './grade-prior-marks/entities/grade-prior-marks.entity';
 import { GradeSubjectGoal } from './grade-prior-marks/entities/grade-subject-goal.entity';
+import { HrModule } from './hr/hr.module';
+import { HrApplicant } from './hr/entities/hr-applicant.entity';
+import { HrInterview } from './hr/entities/hr-interview.entity';
+import { HrInductionVideo } from './hr/entities/hr-induction-video.entity';
+import { HrInductionProgress } from './hr/entities/hr-induction-progress.entity';
 
 @Module({
   imports: [
     ConfigModule.forRoot({ isGlobal: true }),
+    ScheduleModule.forRoot(),
     TypeOrmModule.forRootAsync({
       imports: [ConfigModule],
       useFactory: (config: ConfigService): TypeOrmModuleOptions => {
@@ -79,8 +86,17 @@ import { GradeSubjectGoal } from './grade-prior-marks/entities/grade-subject-goa
           AuditLog,
           Teacher, TimetablePeriod, PermanentExceptionTeacher, DailyAbsenceRecord,
           TeacherModuleStep, GradePriorMarks, GradeSubjectGoal,
+          HrApplicant, HrInterview, HrInductionVideo, HrInductionProgress,
         ];
         const syncSchema = config.get<string>('TYPEORM_SYNC') === 'true';
+        // Defaults to true everywhere (unchanged production behavior). Set
+        // TYPEORM_MIGRATIONS_RUN=false only for bootstrapping a brand-new, empty
+        // database locally with TYPEORM_SYNC=true — migrations run BEFORE
+        // synchronize (see typeorm's DataSource.initialize()), and the oldest
+        // migration here assumes the base schema already exists from a prior
+        // synchronize:true era, so migrations alone cannot build a schema from
+        // nothing. Never disable this against a real/shared database.
+        const migrationsRun = config.get<string>('TYPEORM_MIGRATIONS_RUN') !== 'false';
         if (databaseUrl) {
           return {
             type: 'postgres',
@@ -89,7 +105,7 @@ import { GradeSubjectGoal } from './grade-prior-marks/entities/grade-subject-goa
             extra: { max: 40 },
             entities,
             synchronize: syncSchema,
-            migrationsRun: true,
+            migrationsRun,
             migrations: [__dirname + '/migrations/*.js'],
             logging: false,
           };
@@ -103,7 +119,7 @@ import { GradeSubjectGoal } from './grade-prior-marks/entities/grade-subject-goa
           database: config.get<string>('DB_NAME'),
           entities,
           synchronize: syncSchema,
-          migrationsRun: true,
+          migrationsRun,
           migrations: [__dirname + '/migrations/*.js'],
           logging: false,
         };
@@ -139,6 +155,7 @@ import { GradeSubjectGoal } from './grade-prior-marks/entities/grade-subject-goa
     GradeSubjectsModule,
     LessonPlansModule,
     GradePriorMarksModule,
+    HrModule,
   ],
   providers: [
     { provide: APP_INTERCEPTOR, useClass: AuditLogInterceptor },
