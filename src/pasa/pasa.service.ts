@@ -6,6 +6,7 @@ import { ExamConfig } from './entities/exam-config.entity/exam-config.entity';
 import { ExamMarks } from './entities/exam-marks.entity/exam-marks.entity';
 import { Student } from '../students/entities/student.entity/student.entity';
 import { SectionsService } from '../sections/sections.service';
+import { GradeSubjectsService } from '../grade-subjects/grade-subjects.service';
 
 const safeNum = (v: any) => (v === null || v === undefined || v === '' ? null : +v);
 const avg = (arr: number[]) => arr.length ? +(arr.reduce((a, b) => a + b, 0) / arr.length).toFixed(2) : 0;
@@ -19,6 +20,7 @@ export class PasaService {
     @InjectRepository(ExamMarks) private marksRepo: Repository<ExamMarks>,
     @InjectRepository(Student) private studentRepo: Repository<Student>,
     private sectionsService: SectionsService,
+    private gradeSubjectsService: GradeSubjectsService,
   ) {}
 
   // ── EXAM CONFIG ──────────────────────────────────────────────
@@ -37,6 +39,12 @@ export class PasaService {
   }) {
     const sectionValid = await this.sectionsService.validate(data.grade, data.section, data.academic_year);
     if (!sectionValid) throw new BadRequestException(`Section '${data.section}' does not exist for ${data.grade} in ${data.academic_year}`);
+
+    const gradeSubjects = await this.gradeSubjectsService.getAll();
+    const allowedSubjects = gradeSubjects[data.grade] || [];
+    if (!allowedSubjects.includes(data.subject)) {
+      throw new BadRequestException(`Subject '${data.subject}' is not configured for ${data.grade} in the Subjects module`);
+    }
 
     const total_marks = data.competencies.reduce((sum, c) => sum + (+c.max_marks || 0), 0);
 

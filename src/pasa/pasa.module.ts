@@ -7,12 +7,14 @@ import { ExamConfig } from './entities/exam-config.entity/exam-config.entity';
 import { ExamMarks } from './entities/exam-marks.entity/exam-marks.entity';
 import { Student } from '../students/entities/student.entity/student.entity';
 import { SectionsModule } from '../sections/sections.module';
+import { GradeSubjectsModule } from '../grade-subjects/grade-subjects.module';
 
 @Module({
   imports: [
     TypeOrmModule.forFeature([ExamConfig, ExamMarks, Student]),
     MulterModule.register(),
     SectionsModule,
+    GradeSubjectsModule,
   ],
   providers: [PasaService],
   controllers: [PasaController],
