@@ -1,7 +1,7 @@
 import { Injectable, Logger } from '@nestjs/common';
 import axios from 'axios';
 
-const GROQ_MODEL = 'llama-3.3-70b-versatile'; // same model already used elsewhere in this app
+const GROQ_MODEL = 'openai/gpt-oss-120b'; // llama-3.3-70b-versatile was deprecated/removed by Groq
 
 const FIELDS = [
   'name', 'email', 'contact_no', 'address', 'locality',
