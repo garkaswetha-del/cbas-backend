@@ -46,4 +46,11 @@ export class HrInductionController {
   markHired(@Param('user_id') user_id: string) {
     return this.service.markHired(user_id);
   }
+
+  // Cross-branch onboarding target — called over HTTP by the HR-home backend
+  // when a candidate applied to THIS campus, not the one hosting shared HR.
+  @Post('onboard')
+  onboard(@Body() body: { name: string; email: string; qualification?: string; phone?: string; subjects?: string[] }) {
+    return this.service.onboardTeacher(body);
+  }
 }

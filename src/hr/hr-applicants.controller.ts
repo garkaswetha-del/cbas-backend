@@ -7,8 +7,8 @@ export class HrApplicantsController {
   constructor(private readonly service: HrApplicantsService) {}
 
   @Get()
-  findAll(@Query('stage') stage?: string, @Query('shortlisted') shortlisted?: string, @Query('search') search?: string) {
-    return this.service.findAll({ stage, shortlisted, search });
+  findAll(@Query('stage') stage?: string, @Query('shortlisted') shortlisted?: string, @Query('search') search?: string, @Query('branch') branch?: string) {
+    return this.service.findAll({ stage, shortlisted, search, branch });
   }
 
   @Get(':id')
@@ -35,8 +35,8 @@ export class HrApplicantsController {
   // The real intake path — one or more resume files (PDF/DOCX), parsed with Groq
   @Post('upload-resumes')
   @UseInterceptors(FilesInterceptor('files', 20))
-  uploadResumes(@UploadedFiles() files: Express.Multer.File[]) {
-    return this.service.uploadResumes(files || []);
+  uploadResumes(@UploadedFiles() files: Express.Multer.File[], @Body('branch') branch?: string) {
+    return this.service.uploadResumes(files || [], branch);
   }
 
   @Patch(':id')

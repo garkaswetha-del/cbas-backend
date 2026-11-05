@@ -12,9 +12,10 @@ export class HrApplicantsService {
     private resumeParser: HrResumeParserService,
   ) {}
 
-  async findAll(filters: { stage?: string; shortlisted?: string; search?: string }) {
+  async findAll(filters: { stage?: string; shortlisted?: string; search?: string; branch?: string }) {
     const qb = this.repo.createQueryBuilder('a').orderBy('a.created_at', 'DESC');
     if (filters.stage) qb.andWhere('a.stage = :stage', { stage: filters.stage });
+    if (filters.branch) qb.andWhere('a.branch = :branch', { branch: filters.branch });
     if (filters.shortlisted === 'true') qb.andWhere('a.is_shortlisted = true');
     if (filters.search) {
       qb.andWhere('(a.name ILIKE :s OR a.email ILIKE :s OR a.subject_applied_for ILIKE :s OR a.locality ILIKE :s)', { s: `%${filters.search}%` });
@@ -56,7 +57,7 @@ export class HrApplicantsService {
   // its text extracted, the fields pulled out by Groq, and its own applicant
   // row created — same parsing logic Phase 3's email intake uses, just
   // triggered directly instead of waiting on an inbox poll.
-  async uploadResumes(files: { buffer: Buffer; originalname: string }[]) {
+  async uploadResumes(files: { buffer: Buffer; originalname: string }[], branch?: string) {
     const results: { filename: string; created: boolean; name?: string; reason?: string }[] = [];
     for (const file of files) {
       try {
@@ -70,6 +71,7 @@ export class HrApplicantsService {
           ...extracted,
           resume_file: `data:application/octet-stream;base64,${file.buffer.toString('base64')}`,
           source_portal: 'Manual upload',
+          branch,
         });
         results.push({ filename: file.originalname, created: true, name: applicant.name || undefined });
       } catch (e) {

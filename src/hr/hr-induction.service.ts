@@ -37,6 +37,36 @@ export class HrInductionService {
     return this.videoRepo.findOne({ where: { id } });
   }
 
+  // Creates a teacher login (is_inducting: true) and assigns every active induction
+  // video on THIS backend — reusable both for local selections and for cross-branch
+  // onboarding (called over HTTP by the HR-home backend when a candidate applied to
+  // a different campus than the one hosting the shared HR module).
+  async onboardTeacher(data: { name: string; email: string; qualification?: string; phone?: string; subjects?: string[] }) {
+    const first = (data.name || 'candidate').trim().split(/\s+/)[0] || 'candidate';
+    const tempPassword = first + Math.floor(1000 + Math.random() * 9000);
+    const created = await this.usersService.create({
+      name: data.name || 'New Teacher',
+      email: data.email,
+      password: tempPassword,
+      role: 'teacher',
+      qualification: data.qualification,
+      phone: data.phone,
+      subjects: data.subjects,
+    } as any);
+    const userId = (created as any).id;
+    await this.usersService.update(userId, { is_inducting: true });
+
+    const videos = await this.videoRepo.find({ where: { is_active: true } });
+    const now = new Date();
+    for (const v of videos) {
+      const dueAt = v.due_days ? new Date(now.getTime() + v.due_days * 86400000) : null;
+      await this.progressRepo.save(this.progressRepo.create({
+        user_id: userId, video_id: v.id, assigned_at: now, due_at: dueAt,
+      }));
+    }
+    return { user_id: userId, temp_password: tempPassword };
+  }
+
   // ── Admin/AHM: oversight — everyone currently inducting, and how far along ──
   async progressOverview() {
     const rows = await this.progressRepo

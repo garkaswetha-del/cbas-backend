@@ -27,6 +27,10 @@ export class HrApplicant {
   @Column({ nullable: true }) subject_applied_for: string;
   // Foundation / Preparatory / Middle / Secondary — scopes AI-generated NCF interview questions
   @Column({ nullable: true }) school_stage: string;
+  // Which campus this candidate applied to — "Nanjangudu" or "KR Nagar". This backend is the
+  // shared HR home for both; on selection, Nanjangudu candidates onboard locally, KR Nagar
+  // candidates onboard via a cross-branch API call to that campus's own backend.
+  @Column({ nullable: true }) branch: string;
 
   @Column({ nullable: true }) source_portal: string;
   // data URI (same pattern the app already uses for photos) — survives redeploys, no object storage needed

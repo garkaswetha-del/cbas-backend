@@ -7,11 +7,20 @@ import { HrInductionVideo } from './entities/hr-induction-video.entity';
 import { HrInductionProgress } from './entities/hr-induction-progress.entity';
 import { UsersService } from '../users/users.service';
 import { HrAppointmentLetterService } from './hr-appointment-letter.service';
+import axios from 'axios';
 
 function autoPassword(name: string): string {
   const first = (name || 'candidate').trim().split(/\s+/)[0] || 'candidate';
   return first + Math.floor(1000 + Math.random() * 9000);
 }
+
+// This backend is the shared HR home for both campuses. A candidate whose
+// `branch` is Nanjangudu (or unset) onboards locally, same as always. A
+// candidate whose branch is a different campus onboards over HTTP against
+// that campus's own backend instead, so their login/induction lives there.
+const REMOTE_BRANCH_API: Record<string, string> = {
+  'KR Nagar': process.env.KR_NAGAR_API_URL || 'https://heartfelt-friendship-production.up.railway.app',
+};
 
 @Injectable()
 export class HrInterviewsService {
@@ -130,28 +139,47 @@ export class HrInterviewsService {
     if (!userId) {
       const loginEmail = email || applicant.email;
       if (!loginEmail) throw new NotFoundException('No email on file for this candidate — add one before selecting');
-      tempPassword = autoPassword(applicant.name || 'candidate');
-      const created = await this.usersService.create({
-        name: applicant.name || 'New Teacher',
-        email: loginEmail,
-        password: tempPassword,
-        role: 'teacher',
-        qualification: applicant.qualification,
-        phone: applicant.contact_no,
-        subjects: applicant.subject_applied_for ? [applicant.subject_applied_for] : undefined,
-      } as any);
-      userId = (created as any).id;
-      await this.usersService.update(userId!, { is_inducting: true });
-      await this.applicantRepo.update(applicant.id, { user_id: userId, stage: 'selected' });
 
-      // Auto-assign every active induction video
-      const videos = await this.videoRepo.find({ where: { is_active: true } });
-      const now = new Date();
-      for (const v of videos) {
-        const dueAt = v.due_days ? new Date(now.getTime() + v.due_days * 86400000) : null;
-        await this.progressRepo.save(this.progressRepo.create({
-          user_id: userId!, video_id: v.id, assigned_at: now, due_at: dueAt,
-        }));
+      const remoteUrl = applicant.branch ? REMOTE_BRANCH_API[applicant.branch] : undefined;
+      if (remoteUrl) {
+        // Cross-branch: the candidate applied to a different campus than the one
+        // hosting shared HR — their login + induction must live on THAT campus's
+        // own backend, not here.
+        const res = await axios.post(`${remoteUrl}/hr/induction/onboard`, {
+          name: applicant.name || 'New Teacher',
+          email: loginEmail,
+          qualification: applicant.qualification,
+          phone: applicant.contact_no,
+          subjects: applicant.subject_applied_for ? [applicant.subject_applied_for] : undefined,
+        });
+        userId = res.data?.user_id;
+        tempPassword = res.data?.temp_password;
+        await this.applicantRepo.update(applicant.id, { user_id: userId, stage: 'selected' });
+      } else {
+        // Local onboarding — this campus (or no branch set), unchanged behavior
+        tempPassword = autoPassword(applicant.name || 'candidate');
+        const created = await this.usersService.create({
+          name: applicant.name || 'New Teacher',
+          email: loginEmail,
+          password: tempPassword,
+          role: 'teacher',
+          qualification: applicant.qualification,
+          phone: applicant.contact_no,
+          subjects: applicant.subject_applied_for ? [applicant.subject_applied_for] : undefined,
+        } as any);
+        userId = (created as any).id;
+        await this.usersService.update(userId!, { is_inducting: true });
+        await this.applicantRepo.update(applicant.id, { user_id: userId, stage: 'selected' });
+
+        // Auto-assign every active induction video
+        const videos = await this.videoRepo.find({ where: { is_active: true } });
+        const now = new Date();
+        for (const v of videos) {
+          const dueAt = v.due_days ? new Date(now.getTime() + v.due_days * 86400000) : null;
+          await this.progressRepo.save(this.progressRepo.create({
+            user_id: userId!, video_id: v.id, assigned_at: now, due_at: dueAt,
+          }));
+        }
       }
     } else {
       await this.applicantRepo.update(applicant.id, { stage: 'selected' });
