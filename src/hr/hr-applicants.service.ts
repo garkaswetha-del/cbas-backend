@@ -4,6 +4,17 @@ import { Repository } from 'typeorm';
 import { HrApplicant } from './entities/hr-applicant.entity';
 import { HrResumeParserService } from './hr-resume-parser.service';
 
+// So a PDF opens/previews in the browser tab instead of being force-downloaded
+// as a generic octet-stream. Word files have no built-in browser viewer, so
+// they'll still download even with the correct type — that's a browser limit.
+function resumeMimeType(filename: string): string {
+  const lower = (filename || '').toLowerCase();
+  if (lower.endsWith('.pdf')) return 'application/pdf';
+  if (lower.endsWith('.docx')) return 'application/vnd.openxmlformats-officedocument.wordprocessingml.document';
+  if (lower.endsWith('.doc')) return 'application/msword';
+  return 'application/octet-stream';
+}
+
 @Injectable()
 export class HrApplicantsService {
   constructor(
@@ -69,7 +80,7 @@ export class HrApplicantsService {
         const extracted = await this.resumeParser.extractFields(text);
         const applicant = await this.create({
           ...extracted,
-          resume_file: `data:application/octet-stream;base64,${file.buffer.toString('base64')}`,
+          resume_file: `data:${resumeMimeType(file.originalname)};base64,${file.buffer.toString('base64')}`,
           source_portal: 'Manual upload',
           branch,
         });
@@ -103,5 +114,11 @@ export class HrApplicantsService {
     await this.findOne(id);
     await this.repo.update(id, { stage });
     return this.findOne(id);
+  }
+
+  async remove(id: string) {
+    await this.findOne(id);
+    await this.repo.delete(id);
+    return { success: true };
   }
 }

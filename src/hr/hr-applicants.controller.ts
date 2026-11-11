@@ -1,4 +1,4 @@
-import { Controller, Get, Post, Patch, Body, Param, Query, UseInterceptors, UploadedFiles } from '@nestjs/common';
+import { Controller, Get, Post, Patch, Delete, Body, Param, Query, UseInterceptors, UploadedFiles } from '@nestjs/common';
 import { FilesInterceptor } from '@nestjs/platform-express';
 import { HrApplicantsService } from './hr-applicants.service';
 
@@ -47,5 +47,10 @@ export class HrApplicantsController {
   @Patch(':id/shortlist')
   setShortlist(@Param('id') id: string, @Body() body: { is_shortlisted: boolean; shortlisted_by?: string; shortlist_notes?: string }) {
     return this.service.setShortlist(id, body.is_shortlisted, body.shortlisted_by, body.shortlist_notes);
+  }
+
+  @Delete(':id')
+  remove(@Param('id') id: string) {
+    return this.service.remove(id);
   }
 }
