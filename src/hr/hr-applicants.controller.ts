@@ -53,4 +53,9 @@ export class HrApplicantsController {
   remove(@Param('id') id: string) {
     return this.service.remove(id);
   }
+
+  @Post('bulk-delete')
+  removeMany(@Body() body: { ids: string[] }) {
+    return this.service.removeMany(body.ids || []);
+  }
 }

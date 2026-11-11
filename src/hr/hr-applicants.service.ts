@@ -121,4 +121,10 @@ export class HrApplicantsService {
     await this.repo.delete(id);
     return { success: true };
   }
+
+  async removeMany(ids: string[]) {
+    if (!ids.length) return { success: true, deleted: 0 };
+    await this.repo.delete(ids);
+    return { success: true, deleted: ids.length };
+  }
 }
