@@ -14,6 +14,8 @@ import { HrResumeParserService } from './hr-resume-parser.service';
 import { HrIntakeService } from './hr-intake.service';
 import { HrIntakeController } from './hr-intake.controller';
 import { HrAppointmentLetterService } from './hr-appointment-letter.service';
+import { HrDashboardService } from './hr-dashboard.service';
+import { HrDashboardController } from './hr-dashboard.controller';
 import { UsersModule } from '../users/users.module';
 
 @Module({
@@ -21,7 +23,7 @@ import { UsersModule } from '../users/users.module';
     TypeOrmModule.forFeature([HrApplicant, HrInterview, HrInductionVideo, HrInductionProgress]),
     UsersModule,
   ],
-  controllers: [HrApplicantsController, HrInterviewsController, HrInductionController, HrIntakeController],
-  providers: [HrApplicantsService, HrInterviewsService, HrInductionService, HrResumeParserService, HrIntakeService, HrAppointmentLetterService],
+  controllers: [HrApplicantsController, HrInterviewsController, HrInductionController, HrIntakeController, HrDashboardController],
+  providers: [HrApplicantsService, HrInterviewsService, HrInductionService, HrResumeParserService, HrIntakeService, HrAppointmentLetterService, HrDashboardService],
 })
 export class HrModule {}
