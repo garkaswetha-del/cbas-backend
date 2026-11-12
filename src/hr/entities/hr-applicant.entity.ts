@@ -25,8 +25,11 @@ export class HrApplicant {
   @Column({ type: 'decimal', precision: 10, scale: 2, nullable: true }) previous_salary: number;
   @Column({ type: 'decimal', precision: 10, scale: 2, nullable: true }) expected_salary: number;
   @Column({ nullable: true }) subject_applied_for: string;
-  // Foundation / Preparatory / Middle / Secondary — scopes AI-generated NCF interview questions
-  @Column({ nullable: true }) school_stage: string;
+  // One or more of Foundation / Preparatory / Middle / Secondary — a teacher covering grades 8
+  // and 9, for instance, spans both Middle and Secondary. Scopes AI-generated NCF interview
+  // questions. simple-array stores this as comma-separated text — a single value round-trips
+  // identically to the old plain-string column, so no migration was needed for existing rows.
+  @Column({ type: 'simple-array', nullable: true }) school_stage: string[];
   // Which campus this candidate applied to — "Nanjangudu" or "KR Nagar". This backend is the
   // shared HR home for both; on selection, Nanjangudu candidates onboard locally, KR Nagar
   // candidates onboard via a cross-branch API call to that campus's own backend.
