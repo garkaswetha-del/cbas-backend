@@ -40,10 +40,11 @@ export class HrApplicantsService {
     return row;
   }
 
-  async getInterviewQuestions(id: string) {
+  async getInterviewQuestions(id: string, subjectOverride?: string, stageOverride?: string) {
     const applicant = await this.findOne(id);
     const questions = await this.resumeParser.generateInterviewQuestions(
-      applicant.subject_applied_for, applicant.school_stage,
+      subjectOverride || applicant.subject_applied_for,
+      stageOverride || applicant.school_stage,
     );
     return { questions };
   }

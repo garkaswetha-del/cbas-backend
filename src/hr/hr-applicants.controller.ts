@@ -16,10 +16,12 @@ export class HrApplicantsController {
     return this.service.findOne(id);
   }
 
-  // AI-generated, NCF-aligned interview questions scoped to this candidate's subject + stage
+  // AI-generated, NCF-aligned interview questions scoped to this candidate's subject + stage.
+  // subject/stage query params let the interviewer override the applicant's stored values —
+  // useful when the resume didn't have enough to infer them (e.g. a fresher).
   @Get(':id/interview-questions')
-  getInterviewQuestions(@Param('id') id: string) {
-    return this.service.getInterviewQuestions(id);
+  getInterviewQuestions(@Param('id') id: string, @Query('subject') subject?: string, @Query('stage') stage?: string) {
+    return this.service.getInterviewQuestions(id, subject, stage);
   }
 
   @Post()
