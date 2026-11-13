@@ -42,6 +42,7 @@ export class HrDashboardService {
       shortlisted: applicants.filter(a => a.is_shortlisted).length,
       selected: applicants.filter(a => a.stage === 'selected').length,
       hired: applicants.filter(a => a.stage === 'hired').length,
+      joined: applicants.filter(a => a.joined).length,
       byBranch,
       bySubject,
       byStage,

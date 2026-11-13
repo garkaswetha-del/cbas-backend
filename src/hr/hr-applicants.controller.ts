@@ -60,4 +60,9 @@ export class HrApplicantsController {
   removeMany(@Body() body: { ids: string[] }) {
     return this.service.removeMany(body.ids || []);
   }
+
+  @Post(':id/generate-appointment-letter')
+  generateAppointmentLetter(@Param('id') id: string) {
+    return this.service.generateAppointmentLetter(id);
+  }
 }

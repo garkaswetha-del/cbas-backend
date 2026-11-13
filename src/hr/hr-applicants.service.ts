@@ -1,8 +1,9 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
+import { Injectable, NotFoundException, BadRequestException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { HrApplicant } from './entities/hr-applicant.entity';
 import { HrResumeParserService } from './hr-resume-parser.service';
+import { HrAppointmentLetterService } from './hr-appointment-letter.service';
 
 // So a PDF opens/previews in the browser tab instead of being force-downloaded
 // as a generic octet-stream. Word files have no built-in browser viewer, so
@@ -21,6 +22,7 @@ export class HrApplicantsService {
     @InjectRepository(HrApplicant)
     private repo: Repository<HrApplicant>,
     private resumeParser: HrResumeParserService,
+    private appointmentLetterService: HrAppointmentLetterService,
   ) {}
 
   async findAll(filters: { stage?: string; shortlisted?: string; search?: string; branch?: string }) {
@@ -127,5 +129,19 @@ export class HrApplicantsService {
     if (!ids.length) return { success: true, deleted: 0 };
     await this.repo.delete(ids);
     return { success: true, deleted: ids.length };
+  }
+
+  // Manually triggered from the Joining step, once HR has ticked "Joined" — the
+  // letter is intentionally not auto-generated at selection time anymore, since
+  // there's often a gap between being selected and actually reporting for duty.
+  async generateAppointmentLetter(id: string) {
+    const applicant = await this.findOne(id);
+    if (!applicant.joined) {
+      throw new BadRequestException('Mark this candidate as joined before generating the appointment letter');
+    }
+    const schoolName = process.env.SCHOOL_NAME || 'Wisdom School';
+    const letter = await this.appointmentLetterService.generate(applicant, schoolName);
+    await this.repo.update(id, { appointment_letter: letter });
+    return { appointment_letter: letter };
   }
 }

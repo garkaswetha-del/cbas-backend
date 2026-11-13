@@ -52,6 +52,12 @@ export class HrApplicant {
   // set once "Select" creates their induction/teacher login
   @Column({ nullable: true }) user_id: string;
 
+  // Set manually by HR once the candidate has actually reported for duty — separate
+  // from "selected" (the interview decision) since there's often a gap between the
+  // two. The appointment letter is only generated once this is ticked.
+  @Column({ default: false }) joined: boolean;
+  @Column({ type: 'date', nullable: true }) joining_date: string;
+
   @CreateDateColumn() created_at: Date;
   @UpdateDateColumn() updated_at: Date;
 }
