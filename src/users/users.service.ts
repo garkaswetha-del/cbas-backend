@@ -42,6 +42,12 @@ export class UsersService implements OnModuleInit {
     return query.orderBy('user.name', 'ASC').getMany();
   }
 
+  // Candidates currently going through induction — used to backfill a newly
+  // added induction video to everyone already mid-induction, not just future selects.
+  async findInducting() {
+    return this.userRepo.find({ where: { is_inducting: true } });
+  }
+
   async findInactive() {
     return this.userRepo.find({
       where: { is_active: false },

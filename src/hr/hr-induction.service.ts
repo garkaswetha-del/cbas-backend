@@ -28,8 +28,22 @@ export class HrInductionService {
     return this.videoRepo.find({ order: { sort_order: 'ASC', created_at: 'ASC' } });
   }
 
+  // Backfills this video to everyone already mid-induction — otherwise a candidate
+  // selected before any videos existed (or before this one was added) would never
+  // get it, since assignment normally only happens once, at selection time.
   async createVideo(data: Partial<HrInductionVideo>) {
-    return this.videoRepo.save(this.videoRepo.create(data));
+    const video = await this.videoRepo.save(this.videoRepo.create(data));
+    if (video.is_active) {
+      const inducting = await this.usersService.findInducting();
+      const now = new Date();
+      for (const u of inducting) {
+        const already = await this.progressRepo.findOne({ where: { user_id: u.id, video_id: video.id } });
+        if (already) continue;
+        const dueAt = video.due_days ? new Date(now.getTime() + video.due_days * 86400000) : null;
+        await this.progressRepo.save(this.progressRepo.create({ user_id: u.id, video_id: video.id, assigned_at: now, due_at: dueAt }));
+      }
+    }
+    return video;
   }
 
   async updateVideo(id: string, data: Partial<HrInductionVideo>) {
