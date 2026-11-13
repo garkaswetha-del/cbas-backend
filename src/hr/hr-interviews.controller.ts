@@ -21,18 +21,23 @@ export class HrInterviewsController {
   }
 
   @Post('schedule')
-  schedule(@Body() body: { applicant_id: string; interview_date: string; slot_time?: string; interviewer_name?: string; scheduled_by?: string }) {
+  schedule(@Body() body: { applicant_id: string; round: 'written' | 'oral' | 'demo'; interview_date: string; slot_time?: string; interviewer_name?: string; scheduled_by?: string }) {
     return this.service.schedule(body);
   }
 
   @Patch(':id/notified')
-  markNotified(@Param('id') id: string) {
-    return this.service.markNotified(id);
+  markNotified(@Param('id') id: string, @Body() body: { round: 'written' | 'oral' | 'demo' }) {
+    return this.service.markNotified(id, body.round);
   }
 
   @Patch(':id/attendance')
-  markAttendance(@Param('id') id: string, @Body() body: { attended: boolean }) {
-    return this.service.markAttendance(id, body.attended);
+  markAttendance(@Param('id') id: string, @Body() body: { round: 'written' | 'oral' | 'demo'; attended: boolean }) {
+    return this.service.markAttendance(id, body.round, body.attended);
+  }
+
+  @Patch(':id/proceed-anyway')
+  setProceedAnyway(@Param('id') id: string, @Body() body: { round: 'written' | 'oral'; value: boolean }) {
+    return this.service.setProceedAnyway(id, body.round, body.value);
   }
 
   @Patch(':id/scores')

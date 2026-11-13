@@ -64,51 +64,57 @@ export class HrInterviewsService {
     return this.repo.find({ where: { applicant_id }, order: { created_at: 'DESC' } });
   }
 
-  async schedule(data: { applicant_id: string; interview_date: string; slot_time?: string; interviewer_name?: string; scheduled_by?: string }) {
+  // Written/Oral/Demo are each scheduled, notified, and marked attended independently —
+  // they're often conducted on different days, and the next round only opens up in
+  // the UI once the previous one's attendance has been recorded.
+  async schedule(data: { applicant_id: string; round: 'written' | 'oral' | 'demo'; interview_date: string; slot_time?: string; interviewer_name?: string; scheduled_by?: string }) {
     const applicant = await this.getApplicant(data.applicant_id);
     const existing = await this.repo.findOne({ where: { applicant_id: data.applicant_id } });
+    const patch: Partial<HrInterview> = {
+      [`${data.round}_date`]: data.interview_date,
+      [`${data.round}_time`]: data.slot_time,
+      [`${data.round}_interviewer`]: data.interviewer_name,
+    } as any;
     let interview: HrInterview;
     if (existing) {
-      await this.repo.update(existing.id, {
-        interview_date: data.interview_date,
-        slot_time: data.slot_time,
-        interviewer_name: data.interviewer_name,
-        scheduled_by: data.scheduled_by,
-        scheduled_at: new Date(),
-      });
+      await this.repo.update(existing.id, patch);
       interview = (await this.repo.findOne({ where: { id: existing.id } }))!;
     } else {
       interview = await this.repo.save(this.repo.create({
         applicant_id: data.applicant_id,
-        interview_date: data.interview_date,
-        slot_time: data.slot_time,
-        interviewer_name: data.interviewer_name,
         scheduled_by: data.scheduled_by,
         scheduled_at: new Date(),
+        ...patch,
       }));
     }
     await this.applicantRepo.update(applicant.id, { stage: 'interview_scheduled' });
     return interview;
   }
 
-  async markNotified(id: string) {
-    await this.repo.update(id, { candidate_notified: true, notified_at: new Date() });
+  async markNotified(id: string, round: 'written' | 'oral' | 'demo') {
+    await this.repo.update(id, { [`${round}_notified`]: true, [`${round}_notified_at`]: new Date() } as any);
     return this.repo.findOne({ where: { id } });
   }
 
-  async markAttendance(id: string, attended: boolean) {
+  async markAttendance(id: string, round: 'written' | 'oral' | 'demo', attended: boolean) {
     const interview = await this.repo.findOne({ where: { id } });
     if (!interview) throw new NotFoundException('Interview not found');
-    await this.repo.update(id, { attended });
+    await this.repo.update(id, { [`${round}_attended`]: attended } as any);
     await this.applicantRepo.update(interview.applicant_id, { stage: 'interviewed' });
     return this.repo.findOne({ where: { id } });
   }
 
+  // HR override to unlock the next round even though this one was marked absent
+  // (e.g. the candidate had a valid reason and is being allowed to reschedule).
+  async setProceedAnyway(id: string, round: 'written' | 'oral', value: boolean) {
+    await this.repo.update(id, { [`${round}_proceed_anyway`]: value } as any);
+    return this.repo.findOne({ where: { id } });
+  }
+
   async saveScores(id: string, scores: {
-    written_marks?: number; written_max?: number;
-    oral_marks?: number; oral_max?: number;
-    demo_marks?: number; demo_max?: number;
-    notes?: string;
+    written_marks?: number; written_max?: number; written_notes?: string;
+    oral_marks?: number; oral_max?: number; oral_notes?: string;
+    demo_marks?: number; demo_max?: number; demo_notes?: string;
   }) {
     await this.repo.update(id, scores);
     return this.repo.findOne({ where: { id } });

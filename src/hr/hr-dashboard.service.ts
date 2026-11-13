@@ -49,9 +49,12 @@ export class HrDashboardService {
       byPipelineStage,
       interviews: {
         total: interviews.length,
-        attended: interviews.filter(i => i.attended === true).length,
-        absent: interviews.filter(i => i.attended === false).length,
-        upcoming: interviews.filter(i => i.attended === null).length,
+        // "Attended" here means fully through all three rounds (Written, Oral, Demo)
+        attended: interviews.filter(i => i.demo_attended === true).length,
+        absent: interviews.filter(i => i.written_attended === false || i.oral_attended === false || i.demo_attended === false).length,
+        upcoming: interviews.filter(i =>
+          i.demo_attended !== true && i.written_attended !== false && i.oral_attended !== false && i.demo_attended !== false
+        ).length,
         resultCounts,
       },
     };
